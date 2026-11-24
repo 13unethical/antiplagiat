@@ -1,0 +1,10 @@
+# Зависимости ТОЛЬКО для обучения (на GPU/Colab). В проде не нужны.
+transformers>=4.44
+datasets>=2.20
+torch>=2.2
+scikit-learn>=1.4
+accelerate>=0.33
+optimum[onnxruntime]>=1.21
+# опционально для --gen-llm:
+# anthropic
+# openai

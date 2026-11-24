@@ -1,92 +1,41 @@
 """
-Управление корпусом документов через OpenSearch.
+Корпус для точного/почти-точного поиска плагиата — без Docker/OpenSearch.
 
-Индекс `antiplagiat_corpus`:
-  - Шингловый анализатор (5-8 слов) для быстрого поиска совпадений
-  - more_like_this запросы для нахождения кандидатов-плагиата
-  - Graceful degradation: если OpenSearch недоступен — возвращаем пустые результаты
+Полный текст документов хранится в PostgreSQL (CorpusDocument.content),
+а для быстрого поиска кандидатов в памяти держится индекс шинглов
+(хэши 5-словных окон). Семантический слой (перефраз/межъязыковое) —
+отдельно в embedder.py (Qdrant, локальный режим).
+
+Публичный API синхронный (вызывается из потоков через asyncio.to_thread):
+  index_document(...)      — добавить/обновить документ в кэше
+  search_similar(...)      — кандидаты по пересечению шинглов
+  delete_document(id)      — убрать документ из кэша
+  get_document_count()     — размер корпуса в памяти
+  load_cache(rows)         — загрузить кэш из строк Postgres (при старте)
 """
 from __future__ import annotations
 
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
-INDEX_NAME = "antiplagiat_corpus"
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+_SHINGLE_SIZE = 5
+_MASK = (1 << 64) - 1
 
-INDEX_SETTINGS = {
-    "settings": {
-        "analysis": {
-            "filter": {
-                "shingle_5_8": {
-                    "type": "shingle",
-                    "min_shingle_size": 5,
-                    "max_shingle_size": 8,
-                    "output_unigrams": False,
-                }
-            },
-            "analyzer": {
-                "shingle_analyzer": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "filter": ["lowercase", "shingle_5_8"],
-                }
-            },
-        }
-    },
-    "mappings": {
-        "properties": {
-            "doc_id": {"type": "keyword"},
-            "title": {"type": "text"},
-            "url": {"type": "keyword"},
-            "language": {"type": "keyword"},
-            "source_type": {"type": "keyword"},
-            "content": {
-                "type": "text",
-                "analyzer": "shingle_analyzer",
-                "store": True,
-            },
-            "content_plain": {
-                "type": "text",
-                "store": True,
-            },
-        }
-    },
-}
+# Кэш: doc_id(str) -> {title, url, language, content, shingles:set[int]}
+_CACHE: dict[str, dict] = {}
 
 
-def _get_client():
-    """Возвращает синхронный клиент OpenSearch или None если недоступен."""
-    try:
-        from opensearchpy import OpenSearch
-
-        client = OpenSearch(
-            hosts=[{"host": "localhost", "port": 9200}],
-            http_compress=True,
-            timeout=10,
-            max_retries=1,
-            retry_on_timeout=False,
-        )
-        client.info()  # проверка соединения
-        return client
-    except Exception as exc:
-        logger.warning("OpenSearch unavailable: %s", exc)
-        return None
-
-
-def ensure_index() -> bool:
-    """Создаёт индекс если не существует. Возвращает True при успехе."""
-    client = _get_client()
-    if client is None:
-        return False
-    try:
-        if not client.indices.exists(index=INDEX_NAME):
-            client.indices.create(index=INDEX_NAME, body=INDEX_SETTINGS)
-            logger.info("Created OpenSearch index: %s", INDEX_NAME)
-        return True
-    except Exception as exc:
-        logger.error("Failed to create index: %s", exc)
-        return False
+def _shingle_hashes(text: str, size: int = _SHINGLE_SIZE) -> set[int]:
+    words = _WORD_RE.findall(text.lower())
+    if len(words) < size:
+        return set()
+    return {
+        hash(" ".join(words[i : i + size])) & _MASK
+        for i in range(len(words) - size + 1)
+    }
 
 
 def index_document(
@@ -97,42 +46,47 @@ def index_document(
     language: str,
     source_type: str,
 ) -> bool:
-    """Добавляет документ в OpenSearch. Возвращает True при успехе."""
-    client = _get_client()
-    if client is None:
+    """Добавляет/обновляет документ в кэше шинглов. Persist в Postgres делает вызывающий код."""
+    if not content:
         return False
-    ensure_index()
-    try:
-        client.index(
-            index=INDEX_NAME,
-            id=doc_id,
-            body={
-                "doc_id": doc_id,
-                "title": title,
-                "url": url or "",
-                "language": language,
-                "source_type": source_type,
-                "content": content,
-                "content_plain": content,
-            },
-        )
-        return True
-    except Exception as exc:
-        logger.error("Failed to index document %s: %s", doc_id, exc)
-        return False
+    _CACHE[str(doc_id)] = {
+        "title": title,
+        "url": url or "",
+        "language": language,
+        "source_type": source_type,
+        "content": content,
+        "shingles": _shingle_hashes(content),
+    }
+    return True
 
 
 def delete_document(doc_id: str) -> bool:
-    """Удаляет документ из OpenSearch."""
-    client = _get_client()
-    if client is None:
-        return False
-    try:
-        client.delete(index=INDEX_NAME, id=doc_id, ignore=[404])
-        return True
-    except Exception as exc:
-        logger.error("Failed to delete document %s: %s", doc_id, exc)
-        return False
+    return _CACHE.pop(str(doc_id), None) is not None
+
+
+def get_document_count() -> int:
+    return len(_CACHE)
+
+
+def load_cache(rows) -> int:
+    """Загружает кэш из строк CorpusDocument (ожидаются поля id,title,url,language,content,source_type)."""
+    _CACHE.clear()
+    n = 0
+    for r in rows:
+        content = getattr(r, "content", None)
+        if not content:
+            continue
+        index_document(
+            str(getattr(r, "id")),
+            getattr(r, "title", "") or "",
+            content,
+            getattr(r, "url", None),
+            getattr(r, "language", "ru") or "ru",
+            getattr(r, "source_type", "web") or "web",
+        )
+        n += 1
+    logger.info("Corpus cache loaded: %d documents", n)
+    return n
 
 
 def search_similar(
@@ -141,74 +95,38 @@ def search_similar(
     top_k: int = 10,
 ) -> list[dict]:
     """
-    Ищет документы, похожие на query_text, через more_like_this.
-    Возвращает список: [{doc_id, title, url, language, content, score}]
+    Возвращает кандидатов по пересечению шинглов:
+      [{doc_id, title, url, language, content, score}]
+    score — число совпавших шинглов (для ранжирования).
     """
-    client = _get_client()
-    if client is None:
+    qh = _shingle_hashes(query_text)
+    if not qh or not _CACHE:
         return []
 
-    mlt_query: dict = {
-        "query": {
-            "bool": {
-                "must": [
-                    {
-                        "more_like_this": {
-                            "fields": ["content"],
-                            "like": query_text,
-                            "min_term_freq": 1,
-                            "max_query_terms": 30,
-                            "min_doc_freq": 1,
-                            "minimum_should_match": "25%",
-                        }
-                    }
-                ],
-                "filter": [],
-            }
-        },
-        "size": top_k,
-        "stored_fields": ["content_plain"],
-        "_source": ["doc_id", "title", "url", "language"],
-    }
+    scored: list[tuple[int, str, dict]] = []
+    for doc_id, entry in _CACHE.items():
+        if language and language not in ("mixed", "other") and entry["language"] not in (language, "mixed"):
+            # мягкий фильтр: разрешаем совпадение и при несовпадении языка (межъязыковое ловит embedder),
+            # но для точного поиска приоритет тому же языку — не отбрасываем полностью
+            pass
+        overlap = len(qh & entry["shingles"])
+        if overlap > 0:
+            scored.append((overlap, doc_id, entry))
 
-    # Фильтр по языку (опционально)
-    if language and language not in ("mixed", "other"):
-        mlt_query["query"]["bool"]["filter"].append(
-            {"term": {"language": language}}
-        )
-
-    try:
-        resp = client.search(index=INDEX_NAME, body=mlt_query)
-        results = []
-        for hit in resp["hits"]["hits"]:
-            src = hit["_source"]
-            # Извлекаем хранимое поле content_plain
-            stored = hit.get("fields", {})
-            content_parts = stored.get("content_plain", [])
-            content = content_parts[0] if content_parts else ""
-            results.append(
-                {
-                    "doc_id": src.get("doc_id", hit["_id"]),
-                    "title": src.get("title", ""),
-                    "url": src.get("url", ""),
-                    "language": src.get("language", ""),
-                    "content": content,
-                    "score": hit["_score"],
-                }
-            )
-        return results
-    except Exception as exc:
-        logger.warning("OpenSearch search failed: %s", exc)
-        return []
+    scored.sort(key=lambda x: x[0], reverse=True)
+    out = []
+    for overlap, doc_id, entry in scored[:top_k]:
+        out.append({
+            "doc_id": doc_id,
+            "title": entry["title"],
+            "url": entry["url"],
+            "language": entry["language"],
+            "content": entry["content"],
+            "score": overlap,
+        })
+    return out
 
 
-def get_document_count() -> int:
-    """Возвращает количество документов в корпусе."""
-    client = _get_client()
-    if client is None:
-        return 0
-    try:
-        resp = client.count(index=INDEX_NAME)
-        return resp.get("count", 0)
-    except Exception:
-        return 0
+# Совместимость со старым API (OpenSearch): no-op
+def ensure_index() -> bool:
+    return True

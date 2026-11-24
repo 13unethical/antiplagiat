@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -10,7 +10,8 @@ from app.database import Base
 
 
 class CorpusDocument(Base):
-    """Метаданные документа корпуса. Полный текст хранится в OpenSearch."""
+    """Документ корпуса. Полный текст хранится в Postgres (поле content),
+    шинглы держатся в памяти, эмбеддинги — в Qdrant."""
 
     __tablename__ = "corpus_documents"
 
@@ -23,6 +24,7 @@ class CorpusDocument(Base):
     source_type: Mapped[str] = mapped_column(String(50), nullable=False, default="web")
     # SHA-256 контента для дедупликации
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # ID документа в OpenSearch-индексе (совпадает со str(id))
     opensearch_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

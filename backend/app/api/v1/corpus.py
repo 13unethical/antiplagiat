@@ -70,6 +70,7 @@ async def add_corpus_document(
         language=payload.language,
         source_type=payload.source_type,
         content_hash=content_hash,
+        content=payload.content,
         word_count=word_count,
         opensearch_id=str(doc_id),
     )

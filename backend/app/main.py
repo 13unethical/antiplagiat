@@ -20,6 +20,23 @@ app = FastAPI(
     description="Plagiarism and AI detection service for Uzbek and Russian texts",
 )
 
+
+@app.on_event("startup")
+async def _startup_corpus() -> None:
+    """Наполняет стартовый корпус, загружает кэш шинглов и индексирует семантику."""
+    import asyncio
+    import logging
+    from app.database import AsyncSessionLocal
+    from app.services.seed_corpus import seed_and_load, index_semantics
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await seed_and_load(db)
+        # семантику индексируем в фоне, чтобы не держать старт сервера
+        asyncio.create_task(index_semantics())
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("Corpus startup init failed: %s", exc)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.FRONTEND_URL, "http://localhost:3000", "http://localhost:3001"],

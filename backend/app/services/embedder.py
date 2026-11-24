@@ -53,8 +53,14 @@ def _get_client():
     try:
         from qdrant_client import QdrantClient
         from app.config import settings
-        c = QdrantClient(url=settings.QDRANT_URL, timeout=5)
-        c.get_collections()  # connectivity test
+        if settings.QDRANT_URL:
+            # Удалённый сервер Qdrant (например, через Docker)
+            c = QdrantClient(url=settings.QDRANT_URL, timeout=5)
+            c.get_collections()
+        else:
+            # Локальный режим на диске — без сервера и Docker
+            c = QdrantClient(path=settings.QDRANT_PATH)
+            c.get_collections()
         _client = c
     except Exception as exc:
         logger.warning("Qdrant unavailable: %s", exc)

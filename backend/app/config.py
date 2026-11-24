@@ -22,10 +22,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FRONTEND_URL: str = "http://localhost:3000"
     UPLOAD_DIR: str = "./uploads"
-    QDRANT_URL: str = "http://localhost:6333"
-    # BAAI/bge-m3 — multilingual (1.1 GB, recommended for production)
-    # BAAI/bge-small-en-v1.5 — English only (33 MB, dev-only stub)
-    EMBED_MODEL: str = "BAAI/bge-m3"
+    # Qdrant: если QDRANT_URL пуст — используется локальный режим (на диске), без сервера/Docker
+    QDRANT_URL: str = ""
+    QDRANT_PATH: str = "./qdrant_local"
+    # Мультиязычная модель, поддерживаемая fastembed (uz/ru), ~0.22 ГБ:
+    EMBED_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Каталог с обученной ONNX-моделью ИИ-детектора (model.onnx + токенайзер).
+    # Пусто -> используется эвристика heuristic-v1.
+    AI_MODEL_DIR: str = ""
 
     # Stage 9: Live web search via Brave Search API
     BRAVE_API_KEY: str = ""

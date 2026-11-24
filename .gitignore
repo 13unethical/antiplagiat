@@ -13,3 +13,17 @@ frontend/.env.production
 
 # OS
 .DS_Store
+
+# Local Qdrant (no-docker semantic)
+backend/qdrant_local/
+
+# ML training artifacts
+backend/ml/runs/
+backend/ml/data/*.jsonl
+backend/ml/data/human/*
+backend/ml/data/ai/*
+!backend/ml/data/human/.gitkeep
+!backend/ml/data/ai/.gitkeep
+backend/ml/export/
+backend/ml/*.zip
+backend/app/ml_model/
