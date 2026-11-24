@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+backend/uploads/
+backend/.env
+
+# Node / Next
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/.env.production
+
+# OS
+.DS_Store
