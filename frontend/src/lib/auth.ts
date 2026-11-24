@@ -7,13 +7,16 @@ export interface AuthUser {
   status: string;
 }
 
+import { DEMO, demoUser } from "./demo";
+
 export function getUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem("user");
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
+    if (raw) return JSON.parse(raw) as AuthUser;
+    return DEMO ? demoUser : null;
   } catch {
-    return null;
+    return DEMO ? demoUser : null;
   }
 }
 

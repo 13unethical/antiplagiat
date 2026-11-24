@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { DEMO } from "@/lib/demo";
 
 export default function NewCheckPage() {
   const router = useRouter();
@@ -95,6 +96,16 @@ export default function NewCheckPage() {
     setError("");
     setBatchRunning(true);
     setBatchResults(ready.map((r) => ({ key: r.key, name: r.name.trim(), status: "pending" })));
+    if (DEMO) {
+      for (const r of ready) {
+        await new Promise((res) => setTimeout(res, 500));
+        setBatchResults((prev) =>
+          prev.map((b) => (b.key === r.key ? { ...b, status: "done", checkId: "demo-1" } : b))
+        );
+      }
+      setBatchRunning(false);
+      return;
+    }
     const token = localStorage.getItem("access_token");
     const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -156,6 +167,7 @@ export default function NewCheckPage() {
     if (requireGroup && !group.trim()) { setError("Группа/класс обязательны для заполнения"); return; }
     setUploading(true);
     setError("");
+    if (DEMO) { setTimeout(() => router.push("/checks/demo-1"), 1200); return; }
     try {
       const form = new FormData();
       if (inputMode === "file") {

@@ -1,3 +1,5 @@
+import { DEMO, demoData } from "./demo";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function getStoredToken(): string | null {
@@ -85,5 +87,9 @@ export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit & { authToken?: string } = {},
 ): Promise<T> {
+  if (DEMO) {
+    await new Promise((r) => setTimeout(r, 150));
+    return demoData(path, (options.method ?? "GET").toUpperCase()) as T;
+  }
   return apiFetchInternal<T>(path, options, false);
 }

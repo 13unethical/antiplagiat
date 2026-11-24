@@ -294,6 +294,10 @@ export default function CheckDetailPage() {
     format: "docx" | "pdf"
   ) {
     if (!check) return;
+    if (process.env.NEXT_PUBLIC_DEMO === "1") {
+      alert("Демо-режим: скачивание отчётов доступно после подключения бэкенда.");
+      return;
+    }
     const token = localStorage.getItem("access_token");
     const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     try {
