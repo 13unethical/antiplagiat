@@ -89,7 +89,8 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   if (DEMO) {
     await new Promise((r) => setTimeout(r, 150));
-    return demoData(path, (options.method ?? "GET").toUpperCase()) as T;
+    const body = typeof options.body === "string" ? options.body : undefined;
+    return demoData(path, (options.method ?? "GET").toUpperCase(), body) as T;
   }
   return apiFetchInternal<T>(path, options, false);
 }

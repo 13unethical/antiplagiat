@@ -130,9 +130,40 @@ const orgSettings = {
   plan: "standard",
 };
 
-// Возвращает примерные данные по пути API. method — GET/POST/...
-export function demoData(path: string, method = "GET"): unknown {
+// Демо-группы со студентами (как ждёт страница «Группы и классы»)
+const demoGroups = [
+  {
+    id: "g1", name: "ФК-21", created_at: new Date().toISOString(),
+    students: [
+      { id: "s1", name: "Иван Петров", checks_count: 3 },
+      { id: "s2", name: "Мадина Каримова", checks_count: 2 },
+      { id: "s3", name: "Алишер Усмонов", checks_count: 1 },
+    ],
+  },
+  {
+    id: "g2", name: "ФК-22", created_at: new Date().toISOString(),
+    students: [
+      { id: "s4", name: "Дильноза Рахимова", checks_count: 4 },
+      { id: "s5", name: "Тимур Саидов", checks_count: 0 },
+    ],
+  },
+  {
+    id: "g3", name: "Информатика 10-А", created_at: new Date().toISOString(),
+    students: [
+      { id: "s6", name: "Азиза Юлдашева", checks_count: 2 },
+      { id: "s7", name: "Руслан Ким", checks_count: 1 },
+      { id: "s8", name: "Нигора Абдуллаева", checks_count: 3 },
+    ],
+  },
+];
+
+const rndId = (p: string) => p + Math.random().toString(36).slice(2, 8);
+
+// Возвращает примерные данные по пути API. method — GET/POST/...; body — тело запроса (JSON-строка)
+export function demoData(path: string, method = "GET", body?: string): unknown {
   const p = path.split("?")[0];
+  let payload: Record<string, unknown> = {};
+  try { payload = body ? (JSON.parse(body) as Record<string, unknown>) : {}; } catch { /* ignore */ }
 
   if (p === "/api/v1/auth/login") return { access_token: "demo-token", refresh_token: "demo-refresh" };
   if (p === "/api/v1/auth/refresh") return { access_token: "demo-token", refresh_token: "demo-refresh" };
@@ -142,12 +173,15 @@ export function demoData(path: string, method = "GET"): unknown {
   if (p === "/api/v1/org/settings") return orgSettings;
   if (p === "/api/v1/org/stats") return { teachers: 4, checks_this_month: 12, monthly_quota: 1000, seats_limit: 10 };
   if (p === "/api/v1/groups") {
-    if (method === "POST") return { id: "g-new", name: "Новая группа", student_count: 0 };
-    return [
-      { id: "g1", name: "ФК-21", student_count: 2, created_at: new Date().toISOString() },
-      { id: "g2", name: "ФК-22", student_count: 1, created_at: new Date().toISOString() },
-    ];
+    if (method === "POST")
+      return { id: rndId("g-"), name: (payload.name as string) || "Новая группа", created_at: new Date().toISOString(), students: [] };
+    return demoGroups;
   }
+  // добавить/удалить студента в группе (демо)
+  if (/^\/api\/v1\/groups\/[^/]+\/students$/.test(p) && method === "POST")
+    return { id: rndId("s-"), name: (payload.name as string) || "Новый студент", checks_count: 0 };
+  if (/^\/api\/v1\/groups\/[^/]+\/students\/[^/]+$/.test(p) && method === "DELETE") return {};
+  if (/^\/api\/v1\/groups\/[^/]+$/.test(p) && method === "DELETE") return {};
   if (p === "/api/v1/checks" && method === "POST") return { id: "demo-1", status: "done", filename: "demo.docx" };
   if (p === "/api/v1/checks" && method === "GET") return sampleChecks;
   if (p.startsWith("/api/v1/checks/") && method === "GET") {
