@@ -69,12 +69,23 @@ NEXT_PUBLIC_API_URL = https://antiplagiat-backend.onrender.com
 
 ---
 
-## 3. Связать домены
+## 3. Домен markly.study (Spaceship DNS)
 
-1. Скопировать итоговый адрес Vercel (например `https://antiplagiat.vercel.app`).
-2. В Render у `antiplagiat-backend` задать `FRONTEND_URL` = этот адрес →
-   **Save** (сервис перезапустится). Это нужно для CORS и ссылок в письмах.
-   Превью-домены `*.vercel.app` уже разрешены в CORS по маске.
+Проект Vercel: `ra-baaa/markly` (Production URL → `https://markly.study`).
+API: `api.markly.study` → Render.
+
+В Spaceship → Launchpad → **Advanced DNS** → `markly.study` добавить:
+
+| Type | Host | Value |
+|------|------|-------|
+| A | `@` | `216.198.79.1` |
+| A | `@` | `64.29.17.1` |
+| CNAME | `www` | `3e12ea0a3477b4b3.vercel-dns-017.com` |
+| CNAME | `api` | `<your-service>.onrender.com` |
+
+Удалить parking/redirect записи Spaceship на `@` и `www`, если есть.
+После DNS: в Render → Custom Domain `api.markly.study`;
+`FRONTEND_URL=https://markly.study` (уже в `render.yaml`).
 
 Готово: фронт на Vercel ходит в API на Render.
 
