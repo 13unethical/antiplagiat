@@ -38,3 +38,8 @@ backend/ml/data/ai_v2/
 backend/ml/data/v2/
 backend/ml/logs/
 frontend/tsconfig.tsbuildinfo
+---
+
+# Vercel
+frontend/.vercel/
+.vercel/
