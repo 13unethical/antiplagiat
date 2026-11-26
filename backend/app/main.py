@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.v1 import admin, auth, checks, corpus, groups, invitations, org
+from app.api.v1 import admin, auth, checks, corpus, groups, invitations, lti, org
 from app.config import settings
+from app.services.lti_keys import get_jwks
 
 # Создаём папку для загрузок при старте
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -39,7 +40,14 @@ async def _startup_corpus() -> None:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000", "http://localhost:3001"],
+    allow_origins=[
+        settings.FRONTEND_URL,
+        "https://markly.study",
+        "https://www.markly.study",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+    ],
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
@@ -98,6 +106,12 @@ app.include_router(invitations.router, prefix="/api/v1")
 app.include_router(checks.router, prefix="/api/v1")
 app.include_router(corpus.router, prefix="/api/v1")
 app.include_router(groups.router, prefix="/api/v1")
+app.include_router(lti.router, prefix="/api/v1")
+
+
+@app.get("/.well-known/jwks.json", tags=["lti"])
+async def well_known_jwks():
+    return get_jwks()
 
 
 @app.get("/health", tags=["health"])

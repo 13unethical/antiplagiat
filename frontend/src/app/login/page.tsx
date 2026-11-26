@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Logo } from "../(app)/ui";
 import { setAuth, getUser } from "@/lib/auth";
 import type { AuthUser } from "@/lib/auth";
 
@@ -52,7 +53,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="bg-white p-8 rounded-2xl shadow-sm border w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-1 text-center">Антиплагиат</h1>
+        <h1 className="mb-4 flex justify-center"><Logo className="h-9" /></h1>
         <p className="text-sm text-gray-500 text-center mb-6">Войдите в свой аккаунт</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

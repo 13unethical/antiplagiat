@@ -53,5 +53,11 @@ class Settings(BaseSettings):
     # True = STARTTLS on port 587 (most providers); False = plain on port 25
     SMTP_TLS: bool = True
 
+    # LTI 1.3 tool (Canvas / Moodle)
+    # Path to RSA private key PEM. Empty → auto-generate ./lti_private.pem on first use.
+    LTI_PRIVATE_KEY_PATH: str = "./lti_private.pem"
+    # Public base URL of this API (used in JWKS, OIDC redirects, Canvas launch URLs)
+    API_PUBLIC_URL: str = "http://localhost:8000"
+
 
 settings = Settings()

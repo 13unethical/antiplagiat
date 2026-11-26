@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, PageHeader } from "../ui";
 
 interface Student {
   id: string;
@@ -120,15 +121,12 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold">Группы и классы</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Студенты привязываются к группам — их можно быстро выбрать при проверке
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHeader title="Группы и классы" />
+      <div className="p-4 md:p-8 max-w-5xl mx-auto">
+      <p className="text-sm text-gray-600 mb-5">
+        Студенты привязываются к группам: их можно быстро выбрать при проверке
+      </p>
 
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg flex items-center justify-between">
@@ -140,9 +138,9 @@ export default function GroupsPage() {
       {loading ? (
         <div className="text-sm text-gray-400">Загрузка...</div>
       ) : (
-        <div className="flex gap-5">
+        <div className="flex flex-col md:flex-row gap-5">
           {/* Groups list */}
-          <div className="w-56 shrink-0">
+          <div className="w-full md:w-56 shrink-0">
             <div className="bg-white border rounded-xl overflow-hidden">
               {groups.map((g) => (
                 <div
@@ -150,7 +148,7 @@ export default function GroupsPage() {
                   onClick={() => setSelectedGroupId(g.id)}
                   className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b last:border-b-0 transition-colors ${
                     selectedGroupId === g.id
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-gray-100 text-gray-900"
                       : "hover:bg-gray-50 text-gray-700"
                   }`}
                 >
@@ -160,9 +158,10 @@ export default function GroupsPage() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteGroup(g.id); }}
-                    className="text-gray-200 hover:text-red-400 transition-colors text-lg leading-none"
+                    aria-label="Удалить группу"
+                    className="p-1.5 rounded-md text-gray-400 hover:text-red-700 hover:bg-red-50 transition-colors"
                   >
-                    ×
+                    <Icon name="trash" />
                   </button>
                 </div>
               ))}
@@ -200,14 +199,15 @@ export default function GroupsPage() {
             ) : (
               <div className="bg-white border rounded-xl overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50">
-                  <h2 className="font-medium text-sm">
+                  <h2 className="font-semibold text-base">
                     {selectedGroup.name} · {selectedGroup.students.length} студентов
                   </h2>
                   <button
                     onClick={() => setShowAddStudent(true)}
-                    className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
+                    className="btn btn-primary"
                   >
-                    + Добавить студента
+                    <Icon name="plus" />
+                    Добавить студента
                   </button>
                 </div>
 
@@ -252,7 +252,7 @@ export default function GroupsPage() {
                           <td className="px-4 py-3 text-right">
                             <button
                               onClick={() => removeStudent(s.id)}
-                              className="text-xs text-red-400 hover:underline"
+                              className="text-xs text-gray-500 hover:text-red-700"
                             >
                               Удалить
                             </button>
@@ -268,5 +268,6 @@ export default function GroupsPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

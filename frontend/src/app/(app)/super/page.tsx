@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { Icon, PageHeader, Stats } from "../ui";
 
 interface PlatformStats {
   orgs_total: number;
@@ -57,98 +58,59 @@ export default function SuperOverviewPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">Обзор платформы</h1>
-        <button
-          onClick={() => router.push("/super/schools")}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-        >
-          + Создать школу
+    <>
+      <PageHeader title="Обзор платформы">
+        <button onClick={() => router.push("/super/schools")} className="btn btn-primary">
+          <Icon name="plus" />
+          Создать школу
+        </button>
+      </PageHeader>
+      <Stats
+        items={[
+          { label: "Школы", value: loading ? "—" : platformStats?.orgs_total ?? 0, note: "на платформе" },
+          {
+            label: "Учителя",
+            value: loading ? "—" : platformStats?.teachers_total ?? 0,
+            note: `администраторов: ${platformStats?.admins_total ?? 0}`,
+          },
+          { label: "Проверки", value: loading ? "—" : platformStats?.checks_this_month ?? 0, note: "за этот месяц" },
+          { label: "Попытки обхода", value: loading ? "—" : platformStats?.flagged_this_month ?? 0, note: "работ за этот месяц" },
+        ]}
+      />
+      <div className="px-4 md:px-6 py-3 border-b flex flex-wrap gap-x-6 gap-y-1 text-gray-600 tabular">
+        <span className="font-medium text-gray-900">Веб-поиск за месяц</span>
+        <span>запросов к Brave: {loading ? "—" : platformStats?.web_queries_this_month ?? 0}</span>
+        <span>страниц скачано: {loading ? "—" : platformStats?.web_urls_fetched_this_month ?? 0}</span>
+        <span>совпадений: {loading ? "—" : platformStats?.web_matches_this_month ?? 0}</span>
+      </div>
+
+      <div className="section-title">
+        <h2>Школы</h2>
+        <button onClick={() => router.push("/super/schools")} className="link">
+          Все школы
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Школ</p>
-          <p className="text-2xl font-bold mt-1">
-            {loading ? "—" : platformStats?.orgs_total ?? 0}
-          </p>
-        </div>
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Учителей</p>
-          <p className="text-2xl font-bold mt-1">
-            {loading ? "—" : platformStats?.teachers_total ?? 0}
-          </p>
-          {platformStats && platformStats.admins_total > 0 && (
-            <p className="text-xs text-gray-400 mt-1">{platformStats.admins_total} администраторов</p>
-          )}
-        </div>
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Проверок за месяц</p>
-          <p className="text-2xl font-bold mt-1">
-            {loading ? "—" : platformStats?.checks_this_month ?? 0}
-          </p>
-        </div>
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Flagged за месяц</p>
-          <p className={`text-2xl font-bold mt-1 ${platformStats && platformStats.flagged_this_month > 0 ? "text-orange-500" : ""}`}>
-            {loading ? "—" : platformStats?.flagged_this_month ?? 0}
-          </p>
-        </div>
-      </div>
-
-      {/* Web search stats */}
-      <div className="bg-white border rounded-xl p-4 mb-8">
-        <p className="text-xs font-medium text-gray-500 mb-3">🌐 Веб-поиск за месяц</p>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-xl font-bold">{loading ? "—" : platformStats?.web_queries_this_month ?? 0}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Запросов к Brave API</p>
-          </div>
-          <div>
-            <p className="text-xl font-bold">{loading ? "—" : platformStats?.web_urls_fetched_this_month ?? 0}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Страниц скачано</p>
-          </div>
-          <div>
-            <p className="text-xl font-bold text-orange-600">{loading ? "—" : platformStats?.web_matches_this_month ?? 0}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Совпадений найдено</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Schools */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold">Школы</h2>
-        <button
-          onClick={() => router.push("/super/schools")}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          Все школы →
-        </button>
-      </div>
-
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Школа</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Админ</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Учителя</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Лимит проверок</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Тариф</th>
-              <th className="px-4 py-3" />
+              <th>Школа</th>
+              <th>Админ</th>
+              <th>Учителя</th>
+              <th>Лимит проверок</th>
+              <th>Тариф</th>
+              <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">Загрузка...</td>
+                <td colSpan={6} className="table-empty">Загрузка...</td>
               </tr>
             ) : orgs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={6} className="table-empty">
                   Нет школ. Нажмите «Создать школу».
                 </td>
               </tr>
@@ -157,26 +119,26 @@ export default function SuperOverviewPage() {
                 const admin = users.find((u) => u.org_id === org.id && u.role === "school_admin");
                 const teacherCount = users.filter((u) => u.org_id === org.id && u.role === "teacher").length;
                 return (
-                  <tr key={org.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{org.name}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {admin?.email ?? <span className="text-gray-300">не назначен</span>}
+                  <tr key={org.id}>
+                    <td className="font-medium text-gray-900">{org.name}</td>
+                    <td className="text-gray-500 text-xs">
+                      {admin?.email ?? <span className="text-gray-500">Не назначен</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="text-gray-700">
                       {teacherCount} / {org.seats_limit}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {org.monthly_quota.toLocaleString()} / мес
+                    <td className="text-gray-500">
+                      {org.monthly_quota.toLocaleString("ru")} / мес
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                    <td>
+                      <span className="text-gray-700">
                         {org.plan}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <button
                         onClick={() => router.push("/super/schools")}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="link"
                       >
                         Лимиты
                       </button>
@@ -188,6 +150,6 @@ export default function SuperOverviewPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }

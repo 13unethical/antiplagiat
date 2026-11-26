@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, Notice, PageHeader } from "../../ui";
 
 interface CorpusDoc {
   id: string;
@@ -91,41 +92,36 @@ export default function CorpusPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold">Корпус антиплагиата</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {docs.length} документов · по ним проверяются все работы
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-        >
-          + Добавить документ
+    <>
+      <PageHeader title="Корпус антиплагиата">
+        <button onClick={() => setShowAdd(!showAdd)} className="btn btn-primary">
+          <Icon name="plus" />
+          Добавить документ
         </button>
-      </div>
+      </PageHeader>
+      <p className="px-4 md:px-6 py-3 border-b text-gray-600">
+        Документов: {docs.length}. По ним проверяются все работы
+      </p>
 
       {/* Add form */}
       {showAdd && (
-        <form onSubmit={addDoc} className="bg-white border rounded-xl p-5 mb-5 space-y-4">
-          <h2 className="font-medium text-sm">Новый документ</h2>
+        <form onSubmit={addDoc} className="form-block">
+          <h2 className="font-semibold text-base">Новый документ</h2>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Название *</label>
+            <label className="field-label">Название *</label>
             <input
               required
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="field"
               placeholder="Статья / книга / работа"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">URL источника</label>
+            <label className="field-label">URL источника</label>
             <input
               type="url"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="field"
               placeholder="https://..."
               value={form.url}
               onChange={(e) => setForm({ ...form, url: e.target.value })}
@@ -133,9 +129,9 @@ export default function CorpusPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Язык</label>
+              <label className="field-label">Язык</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={form.language}
                 onChange={(e) => setForm({ ...form, language: e.target.value })}
               >
@@ -145,9 +141,9 @@ export default function CorpusPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Тип источника</label>
+              <label className="field-label">Тип источника</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={form.source_type}
                 onChange={(e) => setForm({ ...form, source_type: e.target.value })}
               >
@@ -159,16 +155,16 @@ export default function CorpusPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
+            <label className="field-label">
               Текст документа *{" "}
-              <span className="font-normal text-gray-400">
+              <span className="font-normal text-gray-500">
                 ({form.content.split(/\s+/).filter(Boolean).length} слов)
               </span>
             </label>
             <textarea
               required
               rows={8}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-y"
+              className="field font-mono resize-y"
               placeholder="Вставьте текст документа..."
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
@@ -178,14 +174,14 @@ export default function CorpusPage() {
             <button
               type="submit"
               disabled={adding}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="btn btn-primary"
             >
               {adding ? "Индексирование..." : "Добавить и проиндексировать"}
             </button>
             <button
               type="button"
               onClick={() => setShowAdd(false)}
-              className="border px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+              className="btn btn-secondary"
             >
               Отмена
             </button>
@@ -194,68 +190,61 @@ export default function CorpusPage() {
       )}
 
       {/* Message */}
-      {msg && (
-        <div className={`mb-5 px-4 py-3 rounded-xl text-sm border ${
-          msg.kind === "ok" ? "bg-blue-50 border-blue-200 text-blue-800" : "bg-red-50 border-red-200 text-red-700"
-        }`}>
-          {msg.text}
-          <button onClick={() => setMsg(null)} className="ml-3 opacity-50 hover:opacity-100">×</button>
-        </div>
-      )}
+      {msg && <Notice kind={msg.kind} onClose={() => setMsg(null)}>{msg.text}</Notice>}
 
       {/* Table */}
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Название</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">URL</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Язык</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Тип</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Слов</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Добавлен</th>
-              <th className="px-4 py-3" />
+              <th>Название</th>
+              <th>URL</th>
+              <th>Язык</th>
+              <th>Тип</th>
+              <th>Слов</th>
+              <th>Добавлен</th>
+              <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Загрузка...</td>
+                <td colSpan={7} className="table-empty">Загрузка...</td>
               </tr>
             ) : docs.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400 text-sm">
+                <td colSpan={7} className="table-empty">
                   Корпус пуст. Добавьте первый документ — по нему будут проверяться работы.
                 </td>
               </tr>
             ) : (
               docs.map((doc) => (
-                <tr key={doc.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900 max-w-[260px] truncate">
+                <tr key={doc.id}>
+                  <td className="font-medium text-gray-900 max-w-[260px] truncate">
                     {doc.title}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-400 max-w-[180px] truncate">
+                  <td className="text-xs text-gray-500 max-w-[180px] truncate">
                     {doc.url ? (
                       <span title={doc.url}>{doc.url}</span>
                     ) : (
-                      <span className="text-gray-200">—</span>
+                      <span className="text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{LANG_LABEL[doc.language] ?? doc.language}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  <td className="text-gray-600">{LANG_LABEL[doc.language] ?? doc.language}</td>
+                  <td>
+                    <span className="text-gray-700">
                       {SOURCE_LABEL[doc.source_type] ?? doc.source_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{doc.word_count.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                  <td className="text-gray-600">{doc.word_count.toLocaleString("ru")}</td>
+                  <td className="text-gray-500 text-xs whitespace-nowrap">
                     {new Date(doc.created_at).toLocaleDateString("ru")}
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     <button
                       onClick={() => deleteDoc(doc.id)}
                       disabled={deleting === doc.id}
-                      className="text-xs text-red-500 hover:underline disabled:opacity-40"
+                      className="link-danger"
                     >
                       {deleting === doc.id ? "..." : "Удалить"}
                     </button>
@@ -266,6 +255,6 @@ export default function CorpusPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }

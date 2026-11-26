@@ -24,8 +24,10 @@ services:
     environment:
       - discovery.type=single-node
       - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=AntiplagiatDev1!
       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-      - bootstrap.memory_lock=true
+      - bootstrap.memory_lock=false
     ulimits:
       memlock:
         soft: -1

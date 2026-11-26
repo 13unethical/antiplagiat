@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, PageHeader, Stats, Status } from "../../ui";
 
 interface ModelVersion {
   id: string;
@@ -105,112 +106,72 @@ export default function ModelsPage() {
   const totalDataset = Object.values(datasetStats).reduce<number>((s, v) => s + (v ?? 0), 0);
 
   return (
-    <div className="p-8 max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Модели детектора</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Версии ИИ-детектора и детектора машинного перевода</p>
-        </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          + Добавить версию
+    <>
+      <PageHeader title="Модели детектора">
+        <button onClick={() => setShowForm(!showForm)} className="btn btn-primary">
+          <Icon name="plus" />
+          Добавить версию
         </button>
-      </div>
+      </PageHeader>
 
-      {/* Active versions summary */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <p className="text-xs text-blue-500 font-medium uppercase tracking-wide">ИИ-детектор</p>
-          {activeAi ? (
-            <>
-              <p className="font-semibold text-blue-900 mt-1">{activeAi.version}</p>
-              <p className="text-xs text-blue-600 mt-0.5">{activeAi.description || "—"}</p>
-              {activeAi.metrics.fpr !== undefined && (
-                <p className="text-xs text-blue-500 mt-1">
-                  FPR: {((activeAi.metrics.fpr as number) * 100).toFixed(1)}%
-                  {activeAi.metrics.tpr_at_1pct !== undefined && ` · TPR@1%: ${((activeAi.metrics.tpr_at_1pct as number) * 100).toFixed(0)}%`}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-blue-400 mt-1">Нет активной версии</p>
+      <div className="grid md:grid-cols-2 gap-px bg-gray-200 border-b">
+        <div className="bg-white px-4 md:px-6 py-4">
+          <p className="text-xs text-gray-500">ИИ-детектор</p>
+          <p className="mt-1.5 text-base font-semibold">{activeAi?.version ?? "Нет активной версии"}</p>
+          {activeAi && (
+            <p className="mt-0.5 text-xs text-gray-500">
+              {[
+                activeAi.description,
+                activeAi.metrics.fpr !== undefined && `FPR ${((activeAi.metrics.fpr as number) * 100).toFixed(1)}%`,
+                activeAi.metrics.tpr_at_1pct !== undefined && `TPR@1% ${((activeAi.metrics.tpr_at_1pct as number) * 100).toFixed(0)}%`,
+              ].filter(Boolean).join(", ")}
+            </p>
           )}
         </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <p className="text-xs text-amber-500 font-medium uppercase tracking-wide">MT-детектор</p>
-          {activeMt ? (
-            <>
-              <p className="font-semibold text-amber-900 mt-1">{activeMt.version}</p>
-              <p className="text-xs text-amber-600 mt-0.5">{activeMt.description || "—"}</p>
-            </>
-          ) : (
-            <p className="text-sm text-amber-400 mt-1">Нет активной версии · используется heuristic-v0</p>
-          )}
+        <div className="bg-white px-4 md:px-6 py-4">
+          <p className="text-xs text-gray-500">Детектор машинного перевода</p>
+          <p className="mt-1.5 text-base font-semibold">{activeMt?.version ?? "Нет активной версии"}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{activeMt ? activeMt.description : "используется heuristic-v0"}</p>
         </div>
-      </div>
-
-      {/* Dataset stats */}
-      <div className="bg-white border rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-medium text-sm">Датасет для дообучения</h2>
-          <span className="text-xs text-gray-400">{totalDataset} записей всего</span>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "human_written", display: "Человек", color: "text-green-700 bg-green-50" },
-            { label: "ai_generated", display: "ИИ", color: "text-orange-700 bg-orange-50" },
-            { label: "machine_translated", display: "Маш. перевод", color: "text-amber-700 bg-amber-50" },
-          ].map(({ label, display, color }) => (
-            <div key={label} className={`rounded-lg p-3 text-center ${color}`}>
-              <p className="text-2xl font-bold">{loading ? "—" : (datasetStats[label] ?? 0)}</p>
-              <p className="text-xs mt-0.5">{display}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400 mt-3">
-          Записи добавляются автоматически при вердикте «added_to_dataset» в разделе споров.
-        </p>
       </div>
 
       {/* Add version form */}
       {showForm && (
-        <div className="bg-white border rounded-xl p-5">
-          <h2 className="font-medium mb-4">Добавить версию модели</h2>
+        <div className="form-block">
+          <h2 className="font-semibold text-base">Добавить версию модели</h2>
           <form onSubmit={handleCreate} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Тип модели</label>
+                <label className="field-label">Тип модели</label>
                 <select
                   value={form.model_type}
                   onChange={(e) => setForm((f) => ({ ...f, model_type: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  className="field"
                 >
                   <option value="ai_detector">ИИ-детектор</option>
                   <option value="mt_detector">MT-детектор</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Версия</label>
+                <label className="field-label">Версия</label>
                 <input
                   value={form.version}
                   onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))}
                   placeholder="v0.4-xlmr-large"
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  className="field"
                 />
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Описание</label>
+              <label className="field-label">Описание</label>
               <input
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="XLM-RoBERTa large, аугментации NLLB"
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="field"
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
                 { key: "fpr", label: "FPR (доля)" },
                 { key: "tpr_at_1", label: "TPR при FPR=1%" },
@@ -220,12 +181,12 @@ export default function ModelsPage() {
                 { key: "languages", label: "Языки" },
               ].map(({ key, label }) => (
                 <div key={key}>
-                  <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+                  <label className="field-label">{label}</label>
                   <input
                     value={(form as Record<string, string>)[key]}
                     onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
                     placeholder={key === "languages" ? "ru, uz" : "0.012"}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    className="field"
                   />
                 </div>
               ))}
@@ -235,14 +196,14 @@ export default function ModelsPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-40"
+                className="btn btn-primary"
               >
                 {saving ? "Сохранение..." : "Добавить"}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="text-sm text-gray-500 hover:underline px-4 py-2"
+                className="btn btn-secondary"
               >
                 Отмена
               </button>
@@ -251,98 +212,73 @@ export default function ModelsPage() {
         </div>
       )}
 
-      {/* Versions list */}
-      <div>
-        <h2 className="font-medium text-sm mb-3">Все версии</h2>
-        {loading ? (
-          <p className="text-sm text-gray-400">Загрузка...</p>
-        ) : versions.length === 0 ? (
-          <div className="bg-white border rounded-xl p-6 text-center">
-            <p className="text-sm text-gray-400">Нет зарегистрированных версий. Текущая модель — stub heuristic.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {versions.map((v) => (
-              <div
-                key={v.id}
-                className={`bg-white border rounded-xl p-5 ${v.is_active ? "border-blue-300" : ""}`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-gray-900">{v.version}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        v.model_type === "ai_detector"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}>
-                        {v.model_type === "ai_detector" ? "ИИ-детектор" : "MT-детектор"}
-                      </span>
-                      {v.is_active && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                          Активна
-                        </span>
-                      )}
-                    </div>
-                    {v.description && (
-                      <p className="text-xs text-gray-500 mt-0.5">{v.description}</p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {new Date(v.created_at).toLocaleDateString("ru", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                    </p>
-                  </div>
-                  {!v.is_active && (
-                    <button
-                      onClick={() => activate(v.id)}
-                      disabled={activating === v.id}
-                      className="text-xs border px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 shrink-0 disabled:opacity-40"
-                    >
-                      {activating === v.id ? "..." : "Развернуть"}
-                    </button>
-                  )}
-                </div>
-
-                {Object.keys(v.metrics).length > 0 && (
-                  <div className="grid grid-cols-4 gap-2 mt-4">
-                    {v.metrics.fpr !== undefined && (
-                      <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                        <p className={`text-base font-bold ${(v.metrics.fpr as number) < 0.02 ? "text-green-600" : "text-yellow-600"}`}>
-                          {((v.metrics.fpr as number) * 100).toFixed(1)}%
-                        </p>
-                        <p className="text-xs text-gray-500">FPR</p>
-                      </div>
-                    )}
-                    {v.metrics.tpr_at_1pct !== undefined && (
-                      <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                        <p className="text-base font-bold text-gray-800">
-                          {((v.metrics.tpr_at_1pct as number) * 100).toFixed(0)}%
-                        </p>
-                        <p className="text-xs text-gray-500">TPR@1%</p>
-                      </div>
-                    )}
-                    {v.metrics.f1 !== undefined && (
-                      <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                        <p className="text-base font-bold text-gray-800">
-                          {((v.metrics.f1 as number) * 100).toFixed(0)}%
-                        </p>
-                        <p className="text-xs text-gray-500">F1</p>
-                      </div>
-                    )}
-                    {v.metrics.dataset_size !== undefined && (
-                      <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                        <p className="text-base font-bold text-gray-800">
-                          {(v.metrics.dataset_size as number).toLocaleString()}
-                        </p>
-                        <p className="text-xs text-gray-500">Датасет</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="section-title">
+        <h2>Датасет для дообучения</h2>
+        <span className="text-xs font-normal text-gray-500">всего записей: {totalDataset}</span>
       </div>
-    </div>
+      <Stats
+        items={[
+          { label: "Написано человеком", value: loading ? "—" : datasetStats.human_written ?? 0 },
+          { label: "Написано ИИ", value: loading ? "—" : datasetStats.ai_generated ?? 0 },
+          { label: "Машинный перевод", value: loading ? "—" : datasetStats.machine_translated ?? 0 },
+        ]}
+      />
+      <p className="px-4 md:px-6 py-3 border-b text-xs text-gray-500">
+        Записи добавляются вердиктом «Добавить в датасет» в разделе споров
+      </p>
+
+      <h2 className="section-title">Все версии</h2>
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Версия</th>
+              <th>Тип</th>
+              <th>FPR</th>
+              <th>TPR@1%</th>
+              <th>F1</th>
+              <th>Датасет</th>
+              <th>Добавлена</th>
+              <th>Статус</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {loading || versions.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="table-empty">
+                  {loading ? "Загрузка..." : "Нет зарегистрированных версий. Сейчас работает эвристика"}
+                </td>
+              </tr>
+            ) : (
+              versions.map((v) => (
+                <tr key={v.id}>
+                  <td>
+                    <p className="font-medium text-gray-900">{v.version}</p>
+                    {v.description && <p className="text-xs text-gray-500">{v.description}</p>}
+                  </td>
+                  <td className="text-gray-700 whitespace-nowrap">{v.model_type === "ai_detector" ? "ИИ-детектор" : "Машинный перевод"}</td>
+                  <td>{v.metrics.fpr !== undefined ? `${((v.metrics.fpr as number) * 100).toFixed(1)}%` : "—"}</td>
+                  <td>{v.metrics.tpr_at_1pct !== undefined ? `${((v.metrics.tpr_at_1pct as number) * 100).toFixed(0)}%` : "—"}</td>
+                  <td>{v.metrics.f1 !== undefined ? `${((v.metrics.f1 as number) * 100).toFixed(0)}%` : "—"}</td>
+                  <td>{v.metrics.dataset_size !== undefined ? (v.metrics.dataset_size as number).toLocaleString("ru") : "—"}</td>
+                  <td className="text-gray-500 text-xs whitespace-nowrap">{new Date(v.created_at).toLocaleDateString("ru")}</td>
+                  <td>
+                    <Status tone={v.is_active ? "green" : "gray"}>{v.is_active ? "Активна" : "Не активна"}</Status>
+                  </td>
+                  <td>
+                    {!v.is_active && (
+                      <button onClick={() => activate(v.id)} disabled={activating === v.id} className="link">
+                        {activating === v.id ? "Запуск..." : "Развернуть"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

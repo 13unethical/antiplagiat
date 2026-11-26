@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { PageHeader, Stats, Status, type Tone } from "../../ui";
 
 interface ApiLogEntry {
   id: string;
@@ -21,11 +22,11 @@ interface ApiLogStats {
   avg_response_ms: number;
 }
 
-function statusColor(code: number) {
-  if (code < 300) return "text-green-600";
-  if (code < 400) return "text-blue-600";
-  if (code < 500) return "text-yellow-600";
-  return "text-red-600";
+function statusTone(code: number): Tone {
+  if (code < 300) return "green";
+  if (code < 400) return "blue";
+  if (code < 500) return "amber";
+  return "red";
 }
 
 export default function ApiLogPage() {
@@ -46,78 +47,60 @@ export default function ApiLogPage() {
   }, []);
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold">API и журнал запросов</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Все запросы через API-ключи школ</p>
-        </div>
-      </div>
+    <>
+      <PageHeader title="API и журнал запросов" />
+      <Stats
+        items={[
+          { label: "Запросы", value: stats?.requests_today ?? "—", note: "сегодня, по ключам школ" },
+          { label: "Ошибки 4xx и 5xx", value: stats?.errors_today ?? "—", note: "сегодня" },
+          { label: "Превышен лимит (429)", value: stats?.limit_hits_today ?? "—", note: "сегодня" },
+          { label: "Среднее время ответа", value: stats ? `${stats.avg_response_ms} мс` : "—", note: "сегодня" },
+        ]}
+      />
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Запросов сегодня</p>
-          <p className="text-2xl font-bold mt-1">{stats?.requests_today ?? "—"}</p>
-        </div>
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Ошибок 4xx/5xx</p>
-          <p className="text-2xl font-bold mt-1 text-yellow-600">{stats?.errors_today ?? "—"}</p>
-        </div>
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Лимит (429)</p>
-          <p className="text-2xl font-bold mt-1 text-red-500">{stats?.limit_hits_today ?? "—"}</p>
-        </div>
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Среднее время ответа</p>
-          <p className="text-2xl font-bold mt-1">
-            {stats ? `${stats.avg_response_ms}мс` : "—"}
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm font-mono">
-          <thead className="border-b bg-gray-50 font-sans">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Время</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Школа</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Ключ</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Запрос</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Статус</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Время</th>
+              <th>Время</th>
+              <th>Школа</th>
+              <th>Ключ</th>
+              <th>Запрос</th>
+              <th>Статус</th>
+              <th>Длительность</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm font-sans">
+                <td colSpan={6} className="table-empty">
                   Загрузка...
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm font-sans">
+                <td colSpan={6} className="table-empty">
                   Нет API-запросов
                 </td>
               </tr>
             ) : (
               logs.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 text-gray-400 text-xs whitespace-nowrap">
+                <tr key={r.id}>
+                  <td className="text-gray-500 text-xs whitespace-nowrap">
                     {new Date(r.created_at).toLocaleString("ru")}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-700 font-sans text-xs">
+                  <td className="text-gray-700 text-xs">
                     {r.org_name ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-400 text-xs">{r.key_prefix ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-800 text-xs">
+                  <td className="text-gray-500 text-xs font-mono">{r.key_prefix ?? "—"}</td>
+                  <td className="text-gray-800 text-xs font-mono">
                     {r.method} {r.path}
                   </td>
-                  <td className={`px-4 py-2.5 font-bold text-xs ${statusColor(r.status_code)}`}>
-                    {r.status_code}
+                  <td>
+                    <Status tone={statusTone(r.status_code)}>{r.status_code}</Status>
                   </td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs">
-                    {r.response_ms != null ? `${r.response_ms}мс` : "—"}
+                  <td className="text-gray-500 text-xs">
+                    {r.response_ms != null ? `${r.response_ms} мс` : "—"}
                   </td>
                 </tr>
               ))
@@ -125,11 +108,11 @@ export default function ApiLogPage() {
           </tbody>
         </table>
         {logs.length > 0 && (
-          <div className="px-4 py-3 border-t text-xs text-gray-400">
-            Последние {logs.length} запросов
+          <div className="px-4 md:px-6 py-3 text-xs text-gray-500">
+            Показано запросов: {logs.length}
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

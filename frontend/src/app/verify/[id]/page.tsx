@@ -115,7 +115,7 @@ export default function VerifyPage() {
             </div>
 
             <p className="text-xs text-gray-400 text-center pt-2 border-t">
-              antiplagiat.uz — Антиплагиат для узбекских школ и вузов
+              Markin — Антиплагиат для узбекских школ и вузов
             </p>
           </>
         )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, Notice, PageHeader, Status, type Tone } from "../../ui";
 
 interface Teacher {
   id: string;
@@ -25,11 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
   pending: "Приглашён",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  active: "bg-green-100 text-green-700",
-  inactive: "bg-gray-100 text-gray-500",
-  pending: "bg-yellow-100 text-yellow-600",
-};
+const STATUS_TONE: Record<string, Tone> = { active: "green", inactive: "gray", pending: "amber" };
 
 export default function TeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -115,33 +112,27 @@ export default function TeachersPage() {
   const canInvite = stats ? stats.available > 0 : false;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold">Учителя</h1>
-          {stats && (
-            <p className="text-sm text-gray-500 mt-0.5">
-              {stats.used} из {stats.seats_limit} мест занято · можно добавить ещё {stats.available}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => setShowInvite(!showInvite)}
-          disabled={!canInvite}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-40 transition-colors"
-        >
-          + Пригласить учителя
+    <>
+      <PageHeader title="Учителя">
+        {stats && (
+          <span className="hidden sm:block text-xs text-gray-500 mr-2">
+            Занято {stats.used} из {stats.seats_limit} мест
+          </span>
+        )}
+        <button onClick={() => setShowInvite(!showInvite)} disabled={!canInvite} className="btn btn-primary">
+          <Icon name="plus" />
+          Пригласить учителя
         </button>
-      </div>
+      </PageHeader>
 
       {/* Invite form */}
       {showInvite && (
         <form
           onSubmit={invite}
-          className="bg-white border rounded-xl p-4 mb-5 flex gap-3 items-end"
+          className="px-4 md:px-6 py-4 border-b bg-gray-50 flex flex-wrap gap-3 items-end"
         >
-          <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-500 mb-1">
+          <div className="flex-1 min-w-[220px] max-w-sm">
+            <label className="field-label">
               Email учителя
             </label>
             <input
@@ -150,20 +141,20 @@ export default function TeachersPage() {
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="teacher@school.uz"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="field"
             />
           </div>
           <div className="flex gap-2">
             <button
               type="submit"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
+              className="btn btn-primary"
             >
               Отправить
             </button>
             <button
               type="button"
               onClick={() => setShowInvite(false)}
-              className="border px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+              className="btn btn-secondary"
             >
               Отмена
             </button>
@@ -172,104 +163,79 @@ export default function TeachersPage() {
       )}
 
       {/* Message */}
-      {msg && (
-        <div
-          className={`mb-5 px-4 py-3 rounded-xl text-sm break-all border ${
-            msg.kind === "ok"
-              ? "bg-blue-50 border-blue-200 text-blue-800"
-              : "bg-red-50 border-red-200 text-red-700"
-          }`}
-        >
-          {msg.text}
-          <button
-            onClick={() => setMsg(null)}
-            className="ml-3 opacity-50 hover:opacity-100"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      {msg && <Notice kind={msg.kind} onClose={() => setMsg(null)}>{msg.text}</Notice>}
 
       {/* Teachers table */}
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Имя</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">
+              <th>Имя</th>
+              <th>Email</th>
+              <th>
                 Проверок за месяц
               </th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">
+              <th>
                 Личный лимит
               </th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Статус</th>
-              <th className="px-4 py-3" />
+              <th>Статус</th>
+              <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={6} className="table-empty">
                   Загрузка...
                 </td>
               </tr>
             ) : teachers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={6} className="table-empty">
                   Нет учителей. Нажмите «Пригласить учителя».
                 </td>
               </tr>
             ) : (
               teachers.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{t.full_name}</td>
-                  <td className="px-4 py-3 text-gray-500">{t.email}</td>
-                  <td className="px-4 py-3 text-gray-700 text-sm">
+                <tr key={t.id}>
+                  <td className="font-medium text-gray-900">{t.full_name || "—"}</td>
+                  <td className="text-gray-500">{t.email}</td>
+                  <td className="text-gray-700">
                     {checksStats[t.id] ?? 0}
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     {editQuotaId === t.id ? (
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
                           min={0}
-                          className="w-20 border rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="∞"
+                          className="field !w-28 !min-h-8"
+                          placeholder="Без лимита"
+                          aria-label="Личный лимит"
                           value={quotaInput}
                           onChange={(e) => setQuotaInput(e.target.value)}
                           autoFocus
                         />
-                        <button onClick={() => saveQuota(t)} className="text-xs text-green-600 hover:underline">✓</button>
-                        <button onClick={() => setEditQuotaId(null)} className="text-xs text-gray-400 hover:underline">✕</button>
+                        <button onClick={() => saveQuota(t)} className="link ml-2">Сохранить</button>
+                        <button onClick={() => setEditQuotaId(null)} className="link-danger ml-2">Отмена</button>
                       </div>
                     ) : (
                       <button
                         onClick={() => { setEditQuotaId(t.id); setQuotaInput(t.personal_quota?.toString() ?? ""); }}
-                        className="text-xs text-gray-500 hover:text-blue-600"
+                        className="text-sm text-gray-700 hover:text-blue-700 hover:underline"
                       >
-                        {t.personal_quota != null ? `${t.personal_quota}/мес` : "∞ без лимита"}
+                        {t.personal_quota != null ? `${t.personal_quota} в месяц` : "Без лимита"}
                       </button>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        STATUS_COLOR[t.status] ?? "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {STATUS_LABEL[t.status] ?? t.status}
-                    </span>
+                  <td>
+                    <Status tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status] ?? t.status}</Status>
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     {t.status !== "pending" && (
                       <button
                         onClick={() => toggleStatus(t)}
-                        className={`text-xs hover:underline ${
-                          t.status === "active"
-                            ? "text-red-500"
-                            : "text-green-600"
-                        }`}
+                        className={t.status === "active" ? "link-danger" : "link"}
                       >
                         {t.status === "active" ? "Отключить" : "Включить"}
                       </button>
@@ -281,6 +247,6 @@ export default function TeachersPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="plagiarism/antiplagiat/db" VERSION="20261127" COMMENT="Antiplagiat plagiarism plugin"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd">
+  <TABLES>
+    <TABLE NAME="plagiarism_antiplagiat_files" COMMENT="Submitted files tracked by Antiplagiat">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="cm" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="identifier" TYPE="char" LENGTH="255" NOTNULL="true"/>
+        <FIELD NAME="checkid" TYPE="char" LENGTH="64" NOTNULL="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="pending"/>
+        <FIELD NAME="similarity" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false"/>
+        <FIELD NAME="aipercent" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false"/>
+        <FIELD NAME="reporturl" TYPE="char" LENGTH="500" NOTNULL="false"/>
+        <FIELD NAME="errormsg" TYPE="text" NOTNULL="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="cm_user_id" UNIQUE="false" FIELDS="cm, userid"/>
+        <INDEX NAME="checkid" UNIQUE="false" FIELDS="checkid"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

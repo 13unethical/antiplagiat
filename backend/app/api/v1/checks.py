@@ -375,6 +375,7 @@ async def get_check(
         matches, check.org_id, check.excluded_sources, check.min_match_words
     )
     out = CheckOut.model_validate(check).model_dump()
+    out["flag_count"] = len(flags)
     if check.excluded_sources:
         out["similarity_percent"] = sim
         out["similarity_sources_count"] = srcs
@@ -910,9 +911,8 @@ def _render_docx_report(
     full_text: Optional[str] = None,
 ) -> bytes:
     doc = DocxDocument()
-    kind_title = {"plagiarism": "Отчёт антиплагиата", "ai": "Отчёт ИИ-детектора"}.get(
-        kind, "Отчёт о проверке"
-    )
+    kind_title = {"plagiarism": "Отчёт антиплагиата", "ai": "Отчёт ИИ-детектора",
+                  "flagged": "Отчёт по обходу"}.get(kind, "Отчёт о проверке")
 
     # ── Cover page ───────────────────────────────────────────────────────────
     _add_cover(doc, check, kind_title)
@@ -967,6 +967,19 @@ def _render_docx_report(
             "дополнительная проверка и человеческое суждение."
         )
         _small(disc, color="9CA3AF", size=8)
+
+    elif kind == "flagged":
+        # ── Flagged / попытки обхода ─────────────────────────────────────────
+        doc.add_heading(f"{len(flags)} попыток обхода", 0)
+        _small(
+            doc.add_paragraph(
+                "Отчёт по приёмам маскировки текста: подмена букв, невидимые символы, "
+                "скрытый текст, разрядка. Их наличие — повод присмотреться к работе."
+            ),
+            size=10,
+        )
+        doc.add_paragraph()
+        _add_flags_section(doc, flags)
 
     else:
         # ── Integrity / Similarity Overview ──────────────────────────────────
@@ -1023,8 +1036,15 @@ def _render_docx_report(
 
     # ── Полный текст с пометками ─────────────────────────────────────────────
     if full_text:
-        spans, legend = _highlight_spans(kind, check, matches, full_text)
-        title = "Текст работы · выделено ИИ" if kind == "ai" else "Текст работы · выделены совпадения и цитаты"
+        if kind == "flagged":
+            spans, legend = [], []
+        else:
+            spans, legend = _highlight_spans(kind, check, matches, full_text)
+        title = (
+            "Текст работы · выделено ИИ" if kind == "ai"
+            else "Текст работы" if kind == "flagged"
+            else "Текст работы · выделены совпадения и цитаты"
+        )
         _add_highlighted_text_docx(doc, full_text, spans, legend, title)
 
     # ── Footer: verification ─────────────────────────────────────────────────
@@ -1040,27 +1060,6 @@ def _render_docx_report(
     return buf.getvalue()
 
 
-# ── PDF-отчёт (reportlab, с поддержкой кириллицы) ─────────────────────────────
-
-_PDF_FONTS_READY = False
-
-
-def _ensure_pdf_fonts() -> None:
-    global _PDF_FONTS_READY
-    if _PDF_FONTS_READY:
-        return
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.pdfbase.pdfmetrics import registerFontFamily
-
-    base = Path(__file__).resolve().parents[2] / "assets"
-    pdfmetrics.registerFont(TTFont("DejaVu", str(base / "DejaVuSans.ttf")))
-    bold = base / "DejaVuSans-Bold.ttf"
-    pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(bold if bold.exists() else base / "DejaVuSans.ttf")))
-    registerFontFamily("DejaVu", normal="DejaVu", bold="DejaVu-Bold", italic="DejaVu", boldItalic="DejaVu-Bold")
-    _PDF_FONTS_READY = True
-
-
 def _render_pdf_report(
     check: Check,
     flags: list[FlagOut],
@@ -1069,151 +1068,43 @@ def _render_pdf_report(
     full_text: Optional[str],
     kind: str,
 ) -> bytes:
-    import xml.sax.saxutils as sx
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import mm
-    from reportlab.lib.colors import HexColor
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from app.services.pdf_report import render_pdf_report
 
-    _ensure_pdf_fonts()
-
-    grey = HexColor("#6B7280")
-    st_title = ParagraphStyle("t", fontName="DejaVu-Bold", fontSize=19, leading=23, spaceAfter=6)
-    st_big = ParagraphStyle("b", fontName="DejaVu-Bold", fontSize=25, leading=29, spaceAfter=4)
-    st_h1 = ParagraphStyle("h", fontName="DejaVu-Bold", fontSize=13, leading=17, spaceBefore=10, spaceAfter=6)
-    st_meta = ParagraphStyle("m", fontName="DejaVu", fontSize=9, leading=13, textColor=grey)
-    st_body = ParagraphStyle("bo", fontName="DejaVu", fontSize=10, leading=15, spaceAfter=6)
-    st_box = ParagraphStyle(
-        "x", fontName="DejaVu", fontSize=9, leading=13, textColor=HexColor("#1E3A8A"),
-        backColor=HexColor("#DBEAFE"), borderPadding=8, spaceBefore=4, spaceAfter=8,
+    return render_pdf_report(
+        check,
+        flags,
+        matches,
+        mt_segments,
+        full_text,
+        kind,
+        highlight_spans_fn=_highlight_spans,
+        segmentize_fn=_segmentize,
     )
-    st_small = ParagraphStyle("s", fontName="DejaVu", fontSize=8, leading=11, textColor=HexColor("#9CA3AF"))
 
-    story: list = []
-    esc = sx.escape
-    now_str = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M")
-    date_str = (check.completed_at or check.created_at).strftime("%d.%m.%Y %H:%M")
-    kind_title = "Отчёт ИИ-детектора" if kind == "ai" else "Отчёт антиплагиата"
 
-    story.append(Paragraph(f'<font color="#2563EB"><b>Антиплагиат</b></font>  ·  {esc(kind_title)}', st_meta))
-    story.append(Spacer(1, 10))
-    story.append(Paragraph(esc(check.work_title or check.filename or "Документ"), st_title))
-    story.append(Spacer(1, 6))
-    meta_bits = [
-        f"ID проверки: <b>{str(check.id).upper()[:8]}</b>",
-        f"Дата проверки: <b>{date_str}</b>",
-        f"Дата скачивания: <b>{now_str}</b>",
-        f"Файл: <b>{esc(check.filename or '—')}</b> · {(check.file_size or 0)/1024:.1f} KB",
-    ]
-    if check.student_name:
-        extra = esc(check.student_name) + (f" · ID {esc(check.student_id)}" if check.student_id else "")
-        meta_bits.append(f"Студент: <b>{extra}</b>")
-    if check.word_count:
-        meta_bits.append(f"Слов: <b>{check.word_count}</b> · Язык: <b>{esc(LANG_LABELS.get(check.language or '', check.language or '—'))}</b>")
-    story.append(Paragraph("<br/>".join(meta_bits), st_meta))
-    story.append(Spacer(1, 14))
+def _pdf_download_name(check_id: uuid.UUID, kind: str) -> str:
+    id_short = str(check_id).upper()[:8]
+    kind_label = {
+        "plagiarism": "совпадения",
+        "ai": "ИИ",
+        "flagged": "обход",
+    }.get(kind, "отчёт")
+    return f"Антиплагиат-{kind_label}-{id_short}.pdf"
 
-    if kind == "ai":
-        ai_pct = check.ai_percent if check.ai_percent is not None else 0
-        story.append(Paragraph(f"{ai_pct:.0f}% определено как ИИ", st_big))
-        story.append(Paragraph(
-            "Процент показывает долю текста, вероятно сгенерированного ИИ или "
-            "сгенерированного и затем переработанного ИИ.", st_meta))
-        story.append(Spacer(1, 8))
-        story.append(Paragraph(
-            "<b>Внимание: требуется проверка человеком.</b><br/>Оценка ИИ — вероятность, "
-            "а не доказательство. Поймите ограничения детектора, прежде чем делать выводы.", st_box))
-        story.append(Paragraph(f"<b>AI-generated&nbsp;&nbsp;{ai_pct:.0f}%</b> — вероятно сгенерировано или переработано ИИ.", st_body))
-        if check.mt_flag:
-            mtp = f" ({check.mt_percent:.0f}% текста)" if check.mt_percent is not None else ""
-            story.append(Paragraph(f"<b>Машинный перевод:</b> вероятно · {len(mt_segments)} фрагментов{mtp}", st_body))
-        if check.stylometry_score is not None:
-            story.append(Paragraph(f"<b>Стилометрия:</b> {check.stylometry_score:.2f} (аномалии стиля)", st_body))
-        story.append(Paragraph(
-            "Дисклеймер. Оценка ИИ-детектора помогает выявить текст, возможно подготовленный "
-            "генеративным ИИ. Она не всегда точна и не должна быть единственным основанием "
-            "для решений в отношении студента.", st_small))
-    else:
-        sim = check.similarity_percent if check.similarity_percent is not None else 0
-        story.append(Paragraph(f"{sim:.0f}%  Общее сходство", st_big))
-        story.append(Paragraph(
-            "Суммарный объём всех совпадений, включая пересекающиеся источники, по всем базам.", st_meta))
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Группы совпадений", st_h1))
-        kinds: dict[str, int] = {}
-        for m in matches:
-            key = "web" if m.source_url else m.match_kind
-            kinds[key] = kinds.get(key, 0) + 1
-        if not kinds:
-            story.append(Paragraph("Совпадений не найдено.", st_body))
-        for k, cnt in kinds.items():
-            story.append(Paragraph(f"<b>{cnt}</b>  {esc(MATCH_KIND_LABELS.get(k, k))}", st_body))
-        story.append(Paragraph("Топ источников", st_h1))
-        top = sorted(matches, key=lambda m: m.score, reverse=True)[:10]
-        if not top:
-            story.append(Paragraph("—", st_body))
-        for m in top:
-            url = f'<br/><font color="#2563EB" size="8">{esc(m.source_url[:90])}</font>' if m.source_url else ""
-            story.append(Paragraph(f"<b>{int(m.score*100)}%</b>  {esc((m.source_title or 'Источник')[:70])}{url}", st_body))
-        story.append(Paragraph(f"Flagged — попытки обхода ({len(flags)})", st_h1))
-        if not flags:
-            story.append(Paragraph("Подозрительных приёмов не обнаружено.", st_body))
-        for f in flags:
-            story.append(Paragraph(f"<b>● {esc(FLAG_LABELS.get(f.type, f.type))}</b>  <font color='#B45309' size='8'>{esc(f.severity)} · {f.count} шт.</font>", st_body))
-            where = _flag_where(f)
-            if where:
-                story.append(Paragraph(f"<font size='9' color='#374151'>Где: {esc(where)}</font>", st_body))
-            how = FLAG_HOW.get(f.type)
-            if how:
-                story.append(Paragraph(f"<font size='8' color='#6B7280'>Как обходит: {esc(how)}</font>", st_body))
-
-    # ── Полный текст с пометками ──
-    if full_text:
-        spans, legend = _highlight_spans(kind, check, matches, full_text)
-        story.append(Spacer(1, 8))
-        story.append(Paragraph(
-            "Текст работы · выделено ИИ" if kind == "ai" else "Текст работы · выделены совпадения и цитаты", st_h1))
-        if legend:
-            leg = "  ".join(f'<font backColor="#{c}">&nbsp;{esc(l)}&nbsp;</font>' for c, l in legend)
-            story.append(Paragraph(leg, st_body))
-        para_markups = [""]
-        for seg_text, color in _segmentize(full_text, spans):
-            for i, part in enumerate(seg_text.split("\n")):
-                if i > 0:
-                    para_markups.append("")
-                piece = esc(part)
-                if color and part:
-                    piece = f'<font backColor="#{color}">{piece}</font>'
-                para_markups[-1] += piece
-        for mk in para_markups:
-            if mk.strip():
-                story.append(Paragraph(mk, st_body))
-
-    story.append(Spacer(1, 10))
-    story.append(Paragraph(f"Проверка подлинности: {settings.FRONTEND_URL}/verify/{check.id}", st_small))
-
-    buf = io.BytesIO()
-    SimpleDocTemplate(
-        buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
-        topMargin=16 * mm, bottomMargin=16 * mm, title=kind_title,
-    ).build(story)
-    buf.seek(0)
-    return buf.getvalue()
 
 @router.get("/{check_id}/report")
 async def get_report(
     check_id: uuid.UUID,
-    format: str = Query("html", pattern="^(html|json|text|docx|pdf)$"),
-    kind: str = Query("full", pattern="^(full|plagiarism|ai)$"),
+    format: str = Query("html", pattern="^(html|json|text|pdf)$"),
+    kind: str = Query("full", pattern="^(full|plagiarism|ai|flagged)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(any_authenticated),
 ):
-    """Скачать отчёт в формате html, json, text, docx или pdf.
+    """Скачать отчёт в формате html, json, text или pdf.
 
     Параметр kind выбирает вид отчёта:
     full — полный, plagiarism — только антиплагиат, ai — только ИИ-детектор.
-    docx и pdf включают полный текст работы с пометками.
+    pdf включает обложку с метриками на 1-й странице и полный текст с пометками.
     """
     check, flags, matches, mt_segments, _, full_text = await _load_check_detail(check_id, current_user, db)
 
@@ -1221,14 +1112,6 @@ async def get_report(
         raise HTTPException(status_code=400, detail="Check is not done yet")
 
     id_short = str(check_id).upper()[:8]
-    suffix = {"plagiarism": "-antiplagiat", "ai": "-ai"}.get(kind, "")
-
-    if format == "docx":
-        return StreamingResponse(
-            io.BytesIO(_render_docx_report(check, flags, matches, mt_segments, kind=kind, full_text=full_text)),
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="report-{id_short}{suffix}.docx"'},
-        )
 
     if format == "pdf":
         try:
@@ -1238,10 +1121,18 @@ async def get_report(
                 status_code=503,
                 detail="PDF-движок не установлен. Выполните: pip install reportlab",
             )
+        from urllib.parse import quote
+
+        filename = _pdf_download_name(check_id, kind)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="report-{id_short}{suffix}.pdf"'},
+            headers={
+                "Content-Disposition": (
+                    f"attachment; filename=\"report-{id_short}.pdf\"; "
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
         )
 
     if format == "text":

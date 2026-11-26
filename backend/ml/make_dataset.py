@@ -57,7 +57,15 @@ def _windows(text: str) -> list[str]:
     return out
 
 
-def _read_folder(base: Path, label: int, default_gen: str) -> list[dict]:
+# Имя папки -> язык (узбекскую кириллицу эвристикой от русской не отличить, берём из папки)
+_FOLDER_LANG = {
+    "ru": "ru", "russian": "ru",
+    "uz_latin": "uz-Latn", "uz-latn": "uz-Latn", "uz_latn": "uz-Latn", "uzlatin": "uz-Latn",
+    "uz_cyrillic": "uz-Cyrl", "uz-cyrl": "uz-Cyrl", "uz_cyrl": "uz-Cyrl", "uzcyrillic": "uz-Cyrl",
+}
+
+
+def _read_folder(base: Path, label: int, default_gen: str, per_file_cap: int = 0) -> list[dict]:
     rows = []
     if not base.is_dir():
         return rows
@@ -66,14 +74,24 @@ def _read_folder(base: Path, label: int, default_gen: str) -> list[dict]:
             text = p.read_text(encoding="utf-8").strip()
         except Exception:
             continue
+        rel = p.relative_to(base).parts
         generator = default_gen
-        if label == 1:
-            # data/ai/<generator>/file.txt -> generator = первая подпапка после base
-            rel = p.relative_to(base).parts
-            if len(rel) > 1:
-                generator = rel[0]
-        for w in _windows(text):
-            rows.append({"text": w, "label": label, "lang": _guess_lang(w), "generator": generator})
+        if label == 1 and len(rel) > 1:
+            # data/ai/<generator>/[lang/]file.txt -> generator = первая подпапка
+            generator = rel[0]
+        # язык: из любой папки пути, иначе эвристика
+        lang = None
+        for part in rel[:-1]:
+            if part.lower() in _FOLDER_LANG:
+                lang = _FOLDER_LANG[part.lower()]
+                break
+        if lang is None:
+            lang = _guess_lang(text)
+        ws = _windows(text)
+        if per_file_cap and len(ws) > per_file_cap:
+            ws = ws[:per_file_cap]  # окна с начала — максимум источников при балансе
+        for w in ws:
+            rows.append({"text": w, "label": label, "lang": lang, "generator": generator})
     return rows
 
 
@@ -142,7 +160,11 @@ def _gen_llm(topics_path: str) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="data", help="каталог с data/human, data/ai и для train/val.jsonl")
+    ap.add_argument("--out", default="data", help="каталог с data/ai и для train/val.jsonl")
+    ap.add_argument("--human-dir", default="", help="папка человеческих текстов (ru/uz_latin/uz_cyrillic); по умолчанию <out>/human")
+    ap.add_argument("--human-per-file", type=int, default=0, help="макс. окон с одного человеческого файла (0=все)")
+    ap.add_argument("--balance", type=float, default=0.0, help="отношение human/AI на язык (2 = вдвое больше человека; 0=выкл)")
+    ap.add_argument("--exclude-lang", default="", help="исключить языки через запятую, напр. uz-Cyrl")
     ap.add_argument("--synth", type=int, default=0, help="сколько синтетических примеров добавить")
     ap.add_argument("--gen-llm", default="", help="файл со списком тем для генерации через LLM")
     ap.add_argument("--exclude-generator", default="", help="убрать генератор из train (holdout для LOMO)")
@@ -150,8 +172,9 @@ def main() -> None:
     args = ap.parse_args()
 
     out = Path(args.out)
+    human_base = Path(os.path.expanduser(args.human_dir)) if args.human_dir else (out / "human")
     rows: list[dict] = []
-    rows += _read_folder(out / "human", 0, "human")
+    rows += _read_folder(human_base, 0, "human", per_file_cap=args.human_per_file)
     rows += _read_folder(out / "ai", 1, "ai")
     if args.synth:
         rows += _synth(args.synth)
@@ -159,8 +182,12 @@ def main() -> None:
         rows += _gen_llm(args.gen_llm)
 
     if not rows:
-        print("Нет данных. Положите .txt в data/human/ и data/ai/<generator>/ или добавьте --synth N.")
+        print("Нет данных. Положите .txt в human-dir и data/ai/<generator>/ или добавьте --synth N.")
         return
+
+    if args.exclude_lang:
+        ex = {x.strip() for x in args.exclude_lang.split(",") if x.strip()}
+        rows = [r for r in rows if r["lang"] not in ex]
 
     holdout = []
     if args.exclude_generator:
@@ -170,6 +197,30 @@ def main() -> None:
         Path(out / "holdout.jsonl").write_text(
             "\n".join(json.dumps(r, ensure_ascii=False) for r in holdout), encoding="utf-8")
 
+    # балансировка классов по языку: human ограничиваем до balance × (кол-во ИИ)
+    if args.balance > 0:
+        from collections import defaultdict
+        by: dict = defaultdict(lambda: {0: [], 1: []})
+        for r in rows:
+            by[r["lang"]][r["label"]].append(r)
+        rows = []
+        for lang, grp in by.items():
+            ai, hu = grp[1], grp[0]
+            target = int(len(ai) * args.balance)
+            if target and len(hu) > target:
+                hu = random.sample(hu, target)
+            rows += ai + hu
+
+    # сводка по языкам
+    from collections import Counter
+    per_lang: dict = {}
+    for r in rows:
+        d = per_lang.setdefault(r["lang"], [0, 0])
+        d[r["label"]] += 1
+    print("Баланс по языкам (человек / ИИ):")
+    for lang, (h, a) in sorted(per_lang.items()):
+        print(f"  {lang:8s} человек={h:6d}  ИИ={a:6d}")
+
     random.shuffle(rows)
     n_val = int(len(rows) * args.val_frac)
     val, train = rows[:n_val], rows[n_val:]
@@ -178,7 +229,9 @@ def main() -> None:
     (out / "val.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in val), encoding="utf-8")
 
     n_ai = sum(r["label"] for r in rows)
+    gens = Counter(r["generator"] for r in rows if r["label"] == 1)
     print(f"Готово: train={len(train)} val={len(val)} holdout={len(holdout)} | ИИ={n_ai} человек={len(rows)-n_ai}")
+    print("ИИ по генераторам:", dict(gens))
 
 
 if __name__ == "__main__":

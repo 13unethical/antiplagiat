@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, PageHeader, Ring } from "../../ui";
 
 interface Flag {
   id: string;
@@ -108,8 +109,8 @@ function formatSize(bytes: number) {
 
 function simColor(pct: number) {
   if (pct >= 50) return "text-red-600";
-  if (pct >= 20) return "text-yellow-600";
-  return "text-green-600";
+  if (pct >= 20) return "text-yellow-700";
+  return "text-green-700";
 }
 
 function buildTextReport(check: CheckDetail): string {
@@ -289,10 +290,7 @@ export default function CheckDetailPage() {
     }
   }
 
-  async function downloadReport(
-    kind: "plagiarism" | "ai",
-    format: "docx" | "pdf"
-  ) {
+  async function downloadReport(kind: "plagiarism" | "ai" | "flagged") {
     if (!check) return;
     if (process.env.NEXT_PUBLIC_DEMO === "1") {
       alert("Демо-режим: скачивание отчётов доступно после подключения бэкенда.");
@@ -302,19 +300,20 @@ export default function CheckDetailPage() {
     const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     try {
       const res = await fetch(
-        `${apiBase}/api/v1/checks/${check.id}/report?format=${format}&kind=${kind}`,
+        `${apiBase}/api/v1/checks/${check.id}/report?format=pdf&kind=${kind}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? `Ошибка генерации ${format.toUpperCase()}`);
+        throw new Error(body.detail ?? "Ошибка генерации PDF");
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const suffix = kind === "ai" ? "-ai" : "-antiplagiat";
+      const kindLabel =
+        kind === "ai" ? "ИИ" : kind === "flagged" ? "обход" : "совпадения";
       a.href = url;
-      a.download = `report-${check.id.slice(0, 8).toUpperCase()}${suffix}.${format}`;
+      a.download = `Антиплагиат-${kindLabel}-${check.id.slice(0, 8).toUpperCase()}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -354,22 +353,28 @@ export default function CheckDetailPage() {
   const isAiStub = check.ai_model_version?.startsWith("stub") ?? true;
 
   return (
-    <div className="p-8 max-w-3xl space-y-6">
-      {/* Breadcrumb */}
-      <button
-        onClick={() => router.push("/checks")}
-        className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
-      >
-        ← История проверок
-      </button>
-
-      {/* Header card */}
-      <div className="bg-white border rounded-xl p-5">
+    <>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2 min-w-0 text-sm tracking-normal">
+            <button
+              onClick={() => router.push("/checks")}
+              className="font-normal text-gray-500 hover:text-gray-900 transition-colors shrink-0"
+            >
+              История проверок
+            </button>
+            <span className="text-gray-300">/</span>
+            <span className="truncate">{check.work_title || check.filename}</span>
+          </span>
+        }
+      />
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+      <div>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="font-semibold text-lg truncate">
+            <h2 className="font-semibold text-2xl tracking-tight">
               {check.work_title || check.filename}
-            </h1>
+            </h2>
             <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
               {check.student_name && (
                 <span>
@@ -423,42 +428,38 @@ export default function CheckDetailPage() {
           </div>
         )}
 
-        {/* Экспорт — два отчёта в стиле Turnitin, DOCX и PDF */}
+        {/* Экспорт — PDF в стиле Markin */}
         {check.status === "done" && (
           <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 border rounded-xl p-3">
-              <p className="text-sm font-medium mb-2">Отчёт антиплагиата</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => downloadReport("plagiarism", "pdf")}
-                  className="flex-1 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-2 transition-colors"
-                >
-                  ⬇ PDF
-                </button>
-                <button
-                  onClick={() => downloadReport("plagiarism", "docx")}
-                  className="flex-1 text-sm text-blue-700 border border-blue-600 hover:bg-blue-50 rounded-lg px-3 py-2 transition-colors"
-                >
-                  ⬇ DOCX
-                </button>
-              </div>
+            <div className="flex-1 flex flex-wrap items-center justify-between gap-2 border rounded-xl pl-4 pr-2 py-2">
+              <p className="text-sm font-medium">Отчёт антиплагиата</p>
+              <button
+                onClick={() => downloadReport("plagiarism")}
+                className="btn btn-secondary"
+              >
+                <Icon name="download" className="text-gray-500" />
+                PDF
+              </button>
             </div>
-            <div className="flex-1 border rounded-xl p-3">
-              <p className="text-sm font-medium mb-2">Отчёт ИИ-детектора</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => downloadReport("ai", "pdf")}
-                  className="flex-1 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-3 py-2 transition-colors"
-                >
-                  ⬇ PDF
-                </button>
-                <button
-                  onClick={() => downloadReport("ai", "docx")}
-                  className="flex-1 text-sm text-violet-700 border border-violet-600 hover:bg-violet-50 rounded-lg px-3 py-2 transition-colors"
-                >
-                  ⬇ DOCX
-                </button>
-              </div>
+            <div className="flex-1 flex flex-wrap items-center justify-between gap-2 border rounded-xl pl-4 pr-2 py-2">
+              <p className="text-sm font-medium">Отчёт ИИ-детектора</p>
+              <button
+                onClick={() => downloadReport("ai")}
+                className="btn btn-secondary"
+              >
+                <Icon name="download" className="text-gray-500" />
+                PDF
+              </button>
+            </div>
+            <div className="flex-1 flex flex-wrap items-center justify-between gap-2 border rounded-xl pl-4 pr-2 py-2">
+              <p className="text-sm font-medium">Отчёт по обходу</p>
+              <button
+                onClick={() => downloadReport("flagged")}
+                className="btn btn-secondary"
+              >
+                <Icon name="download" className="text-gray-500" />
+                PDF
+              </button>
             </div>
           </div>
         )}
@@ -467,9 +468,10 @@ export default function CheckDetailPage() {
       {/* Summary cards */}
       {check.status === "done" && (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white border rounded-xl p-4 text-center">
-              <p className={`text-3xl font-bold ${simColor(simPct)}`}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 border rounded-xl divide-y sm:divide-y-0 sm:divide-x tabular">
+            <div className="px-5 py-4">
+              <p className={`text-2xl font-semibold tracking-tight flex items-center gap-2.5 ${simColor(simPct)}`}>
+                <Ring value={simPct} />
                 {simPct.toFixed(1)}%
               </p>
               <p className="text-xs text-gray-500 mt-1">Совпадения</p>
@@ -480,45 +482,45 @@ export default function CheckDetailPage() {
                   </p>
                 )}
             </div>
-            <div className="bg-white border rounded-xl p-4 text-center">
+            <div className="px-5 py-4">
               {aiPct !== null && aiPct !== undefined ? (
                 <>
-                  <p className={`text-3xl font-bold ${
-                    aiPct >= 50 ? "text-orange-500" : aiPct >= 25 ? "text-yellow-500" : "text-gray-800"
+                  <p className={`text-2xl font-semibold tracking-tight ${
+                    "text-gray-900"
                   }`}>
                     {aiPct.toFixed(0)}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">Вероятный ИИ-текст</p>
                   {isAiStub && (
-                    <p className="text-xs text-gray-300 mt-0.5">stub · модель в разработке</p>
+                    <p className="text-xs text-gray-500 mt-0.5">модель в разработке</p>
                   )}
                 </>
               ) : (
                 <>
-                  <p className="text-3xl font-bold text-gray-200">—</p>
+                  <p className="text-2xl font-semibold tracking-tight text-gray-200">—</p>
                   <p className="text-xs text-gray-500 mt-1">Вероятный ИИ-текст</p>
                 </>
               )}
             </div>
-            <div className="bg-white border rounded-xl p-4 text-center">
+            <div className="px-5 py-4">
               <p
-                className={`text-3xl font-bold ${
-                  check.flags.length > 0 ? "text-orange-500" : "text-gray-200"
+                className={`text-2xl font-semibold tracking-tight ${
+                  check.flags.length > 0 ? "text-orange-700" : "text-gray-400"
                 }`}
               >
                 {check.flags.length}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Flagged</p>
+              <p className="text-xs text-gray-500 mt-1">Попытки обхода</p>
               {flagsHigh.length > 0 && (
-                <p className="text-xs text-red-400 mt-0.5">
-                  {flagsHigh.length} критичных
+                <p className="text-xs text-red-700 mt-0.5">
+                  критичных: {flagsHigh.length}
                 </p>
               )}
             </div>
           </div>
 
           {/* Disclaimer */}
-          <p className="text-xs text-gray-400 bg-gray-50 border rounded-xl px-4 py-3">
+          <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3">
             ИИ-оценка — вероятность, а не доказательство. Перед выводами
             откройте подсвеченные фрагменты и поговорите со студентом.
           </p>
@@ -528,7 +530,7 @@ export default function CheckDetailPage() {
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
               <span className="font-medium">Вероятно машинный перевод</span>
               {" — "}
-              {check.mt_segments.length} фрагментов ({check.mt_percent?.toFixed(0)}% текста).
+              фрагментов: {check.mt_segments.length} ({check.mt_percent?.toFixed(0)}% текста).
               Текст мог быть переведён с другого языка.
             </div>
           )}
@@ -555,8 +557,8 @@ export default function CheckDetailPage() {
 
       {/* ── Matches list ──────────────────────────────────────────────── */}
       {check.matches.length > 0 && (
-        <div className="bg-white border rounded-xl p-5">
-          <h2 className="font-semibold mb-4">
+        <div>
+          <h2 className="text-base font-semibold mb-4">
             Источники совпадений ({check.matches.length})
           </h2>
           <div className="space-y-2">
@@ -607,7 +609,7 @@ export default function CheckDetailPage() {
                       >
                         {m.match_kind === "exact" ? "Точное"
                           : m.match_kind === "cross_lingual" ? "Межъязыковое"
-                          : m.match_kind === "web" ? "🌐 Веб"
+                          : m.match_kind === "web" ? "Веб"
                           : "Перефраз"}
                       </span>
                       <span className="text-xs font-medium text-gray-600">
@@ -615,7 +617,7 @@ export default function CheckDetailPage() {
                       </span>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-gray-600 bg-white rounded px-2 py-1.5 border border-gray-100 italic line-clamp-2">
+                  <p className="mt-2 text-xs text-gray-600 bg-white rounded px-2 py-1.5 border border-gray-100 line-clamp-2">
                     «{m.matched_text}»
                   </p>
                   {!excludedSources.includes(m.source_title) ? (
@@ -640,7 +642,7 @@ export default function CheckDetailPage() {
                       Исключить источник
                     </button>
                   ) : (
-                    <span className="mt-2 text-xs text-green-600">✓ Источник исключён</span>
+                    <span className="mt-2 text-xs text-green-600">Источник исключён</span>
                   )}
                 </div>
               );
@@ -651,7 +653,7 @@ export default function CheckDetailPage() {
 
       {check.status === "done" && check.matches.length === 0 && (
         <div className="bg-white border rounded-xl p-6 text-center">
-          <div className="text-3xl mb-2">✓</div>
+          <Icon name="check" className="mx-auto mb-2 text-green-700" />
           <p className="font-medium text-green-700">Совпадений с корпусом не найдено</p>
           <p className="text-sm text-gray-400 mt-1">
             Корпус пока небольшой — результат улучшится по мере его роста
@@ -661,9 +663,9 @@ export default function CheckDetailPage() {
 
       {/* Flags */}
       {check.flags.length > 0 && (
-        <div className="bg-white border rounded-xl p-5">
-          <h2 className="font-semibold mb-4">
-            Flagged — попытки обхода ({check.flags.length})
+        <div>
+          <h2 className="text-base font-semibold mb-4">
+            Попытки обхода ({check.flags.length})
           </h2>
           <div className="space-y-3">
             {check.flags.map((flag) => (
@@ -682,13 +684,13 @@ export default function CheckDetailPage() {
                   </span>
                 </div>
                 <div className="mt-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide opacity-60">
+                  <span className="text-xs font-medium opacity-80">
                     Где найдено
                   </span>
                   <FlagDetails type={flag.type} details={flag.details} />
                 </div>
                 {FLAG_HOW[flag.type] && (
-                  <p className="mt-2 text-xs opacity-70">
+                  <p className="mt-2 text-xs opacity-90">
                     <span className="font-semibold">Как обходит систему: </span>
                     {FLAG_HOW[flag.type]}
                   </p>
@@ -699,6 +701,7 @@ export default function CheckDetailPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -730,7 +733,7 @@ function FlagDetails({
   if (type === "invisible_char" && details.by_type) {
     const byType = details.by_type as Record<string, number>;
     return (
-      <div className="mt-2 text-xs opacity-70 space-y-0.5">
+      <div className="mt-2 text-xs opacity-90 space-y-0.5">
         {Object.entries(byType).map(([name, count]) => (
           <p key={name}>
             {name}: {count}×
@@ -742,7 +745,7 @@ function FlagDetails({
   if (type === "hidden_text" && details.examples) {
     const examples = details.examples as string[];
     return (
-      <div className="mt-2 text-xs opacity-70">
+      <div className="mt-2 text-xs opacity-90">
         {examples.slice(0, 2).map((ex, i) => (
           <p key={i} className="truncate">
             {ex}
@@ -753,7 +756,7 @@ function FlagDetails({
   }
   if (type === "quote_abuse" && details.quoted_percent) {
     return (
-      <p className="mt-2 text-xs opacity-70">
+      <p className="mt-2 text-xs opacity-90">
         В кавычках: {details.quoted_percent as number}% текста (порог 25%)
       </p>
     );
@@ -761,7 +764,7 @@ function FlagDetails({
   if (type === "spaced_text" && details.examples) {
     const examples = details.examples as string[];
     return (
-      <div className="mt-2 text-xs opacity-70">
+      <div className="mt-2 text-xs opacity-90">
         {examples.slice(0, 3).map((ex, i) => (
           <p key={i}>«{ex}»</p>
         ))}

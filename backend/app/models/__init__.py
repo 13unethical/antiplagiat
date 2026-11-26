@@ -12,6 +12,7 @@ from .model_version import ModelVersion
 from .dataset_entry import DatasetEntry
 from .repository_document import RepositoryDocument
 from .audit_log import AuditLog
+from .lti import LtiPlatform, LtiSubmission
 
 __all__ = [
     "Organization", "User", "Invitation",
@@ -20,4 +21,5 @@ __all__ = [
     "Dispute", "ApiKey", "WebSearchLog",
     "MTSegment", "ModelVersion", "DatasetEntry",
     "RepositoryDocument", "AuditLog",
+    "LtiPlatform", "LtiSubmission",
 ]

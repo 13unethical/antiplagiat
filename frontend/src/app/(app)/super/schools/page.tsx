@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, Notice, PageHeader, Status } from "../../ui";
 
 interface Organization {
   id: string;
@@ -138,26 +139,23 @@ export default function SchoolsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">Школы и админы</h1>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-        >
-          + Создать школу
+    <>
+      <PageHeader title="Школы и админы">
+        <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary">
+          <Icon name="plus" />
+          Создать школу
         </button>
-      </div>
+      </PageHeader>
 
       {/* Create form */}
       {showCreate && (
-        <form onSubmit={createOrg} className="bg-white border rounded-xl p-5 mb-5 space-y-4">
-          <h2 className="font-medium text-sm">Новая школа</h2>
+        <form onSubmit={createOrg} className="form-block">
+          <h2 className="font-semibold text-base">Новая школа</h2>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Название</label>
+            <label className="field-label">Название</label>
             <input
               required
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="field"
               placeholder="Школа №1"
               value={newOrg.name}
               onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
@@ -165,58 +163,58 @@ export default function SchoolsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Лимит учителей</label>
+              <label className="field-label">Лимит учителей</label>
               <input
                 type="number" min={1}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={newOrg.seats_limit}
                 onChange={(e) => setNewOrg({ ...newOrg, seats_limit: +e.target.value })}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Проверок в месяц</label>
+              <label className="field-label">Проверок в месяц</label>
               <input
                 type="number" min={1}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={newOrg.monthly_quota}
                 onChange={(e) => setNewOrg({ ...newOrg, monthly_quota: +e.target.value })}
               />
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Создать</button>
-            <button type="button" onClick={() => setShowCreate(false)} className="border px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Отмена</button>
+            <button type="submit" className="btn btn-primary">Создать</button>
+            <button type="button" onClick={() => setShowCreate(false)} className="btn btn-secondary">Отмена</button>
           </div>
         </form>
       )}
 
       {/* Edit limits modal */}
       {editForm && (
-        <form onSubmit={saveOrgLimits} className="bg-white border rounded-xl p-5 mb-5 space-y-4">
-          <h2 className="font-medium text-sm">Лимиты: {editForm.name}</h2>
+        <form onSubmit={saveOrgLimits} className="form-block">
+          <h2 className="font-semibold text-base">Лимиты: {editForm.name}</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Лимит учителей</label>
+              <label className="field-label">Лимит учителей</label>
               <input
                 type="number" min={1}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={editForm.seats_limit}
                 onChange={(e) => setEditForm({ ...editForm, seats_limit: +e.target.value })}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Проверок в месяц</label>
+              <label className="field-label">Проверок в месяц</label>
               <input
                 type="number" min={1}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={editForm.monthly_quota}
                 onChange={(e) => setEditForm({ ...editForm, monthly_quota: +e.target.value })}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Тариф</label>
+              <label className="field-label">Тариф</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={editForm.plan}
                 onChange={(e) => setEditForm({ ...editForm, plan: e.target.value })}
               >
@@ -226,72 +224,65 @@ export default function SchoolsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Действует до</label>
+              <label className="field-label">Действует до</label>
               <input
                 type="date"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field"
                 value={editForm.valid_until?.slice(0, 10) ?? ""}
                 onChange={(e) => setEditForm({ ...editForm, valid_until: e.target.value || null })}
               />
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Сохранить</button>
-            <button type="button" onClick={() => setEditForm(null)} className="border px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Отмена</button>
+            <button type="submit" className="btn btn-primary">Сохранить</button>
+            <button type="button" onClick={() => setEditForm(null)} className="btn btn-secondary">Отмена</button>
           </div>
         </form>
       )}
 
       {/* Invite admin form */}
       {inviteForm && (
-        <form onSubmit={sendInvite} className="bg-white border rounded-xl p-5 mb-5 space-y-3">
-          <h2 className="font-medium text-sm">Пригласить администратора школы</h2>
+        <form onSubmit={sendInvite} className="form-block">
+          <h2 className="font-semibold text-base">Пригласить администратора школы</h2>
           <input
             type="email" required
             value={inviteForm.email}
             onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
             placeholder="admin@school.uz"
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field"
           />
           <div className="flex gap-2">
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Отправить</button>
-            <button type="button" onClick={() => setInviteForm(null)} className="border px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Отмена</button>
+            <button type="submit" className="btn btn-primary">Отправить</button>
+            <button type="button" onClick={() => setInviteForm(null)} className="btn btn-secondary">Отмена</button>
           </div>
         </form>
       )}
 
       {/* Message */}
-      {msg && (
-        <div className={`mb-5 px-4 py-3 rounded-xl text-sm break-all border ${
-          msg.kind === "ok" ? "bg-blue-50 border-blue-200 text-blue-800" : "bg-red-50 border-red-200 text-red-700"
-        }`}>
-          {msg.text}
-          <button onClick={() => setMsg(null)} className="ml-3 opacity-50 hover:opacity-100">×</button>
-        </div>
-      )}
+      {msg && <Notice kind={msg.kind} onClose={() => setMsg(null)}>{msg.text}</Notice>}
 
       {/* Table */}
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Школа</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Админ</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Учителя</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Лимит проверок</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Тариф</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Действует до</th>
-              <th className="px-4 py-3" />
+              <th>Школа</th>
+              <th>Админ</th>
+              <th>Учителя</th>
+              <th>Лимит проверок</th>
+              <th>Тариф</th>
+              <th>Действует до</th>
+              <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Загрузка...</td>
+                <td colSpan={7} className="table-empty">Загрузка...</td>
               </tr>
             ) : orgs.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Нет школ. Нажмите «Создать школу».</td>
+                <td colSpan={7} className="table-empty">Нет школ. Нажмите «Создать школу».</td>
               </tr>
             ) : (
               orgs.map((org) => {
@@ -299,53 +290,55 @@ export default function SchoolsPage() {
                 const teachers = users.filter((u) => u.org_id === org.id && u.role === "teacher");
                 const isExpanded = expandedOrg === org.id;
                 return (
-                  <>
-                    <tr key={org.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{org.name}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
+                  <Fragment key={org.id}>
+                    <tr>
+                      <td className="font-medium text-gray-900">{org.name}</td>
+                      <td className="text-xs text-gray-500">
                         {admin ? (
                           <div className="flex items-center gap-2">
                             <span>{admin.email}</span>
                             <button
                               onClick={() => handleImpersonate(admin)}
-                              className="text-purple-600 hover:underline text-xs"
+                              className="link"
                             >
-                              войти
+                              Войти
                             </button>
                           </div>
                         ) : (
-                          <span className="text-gray-300">не назначен</span>
+                          <span className="text-gray-500">Не назначен</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700">
+                      <td className="text-gray-700">
                         <button
                           onClick={() => setExpandedOrg(isExpanded ? null : org.id)}
-                          className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                          aria-expanded={isExpanded}
+                          aria-label={`Учителя школы ${org.name}`}
+                          className="flex items-center gap-1 whitespace-nowrap hover:text-blue-700 transition-colors"
                         >
                           <span>{teachers.length} / {org.seats_limit}</span>
-                          <span className="text-gray-400 text-xs">{isExpanded ? "▲" : "▼"}</span>
+                          <Icon name="chevron" className={`text-gray-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-gray-500">{org.monthly_quota.toLocaleString()} / мес</td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{org.plan}</span>
+                      <td className="text-gray-500">{org.monthly_quota.toLocaleString("ru")} / мес</td>
+                      <td>
+                        <span className="text-gray-700">{org.plan}</span>
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
+                      <td className="text-gray-500 text-xs">
                         {org.valid_until
                           ? new Date(org.valid_until).toLocaleDateString("ru")
                           : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <div className="flex gap-3">
                           <button
                             onClick={() => setEditForm({ ...org })}
-                            className="text-xs text-blue-600 hover:underline"
+                            className="link"
                           >
                             Лимиты
                           </button>
                           <button
                             onClick={() => setInviteForm({ orgId: org.id, email: "" })}
-                            className="text-xs text-blue-600 hover:underline"
+                            className="link"
                           >
                             {admin ? "Сменить админа" : "Пригласить админа"}
                           </button>
@@ -353,25 +346,24 @@ export default function SchoolsPage() {
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr key={`${org.id}-teachers`} className="bg-purple-50">
+                      <tr className="bg-gray-50">
                         <td colSpan={7} className="px-6 py-3">
                           {teachers.length === 0 ? (
-                            <p className="text-xs text-gray-400">Нет учителей в этой школе</p>
+                            <p className="text-xs text-gray-500">Нет учителей в этой школе</p>
                           ) : (
                             <div className="space-y-1">
-                              <p className="text-xs font-medium text-gray-500 mb-2">Учителя школы:</p>
+                              <p className="text-xs font-medium text-gray-500 mb-2">Учителя школы</p>
                               {teachers.map((t) => (
-                                <div key={t.id} className="flex items-center gap-3 text-xs">
-                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.status === "active" ? "bg-green-400" : "bg-gray-300"}`} />
+                                <div key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                                   <span className="text-gray-700 w-48 truncate">{t.email}</span>
-                                  <span className="text-gray-400">{t.full_name || "—"}</span>
-                                  <span className={`text-xs px-1.5 py-0.5 rounded ${t.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                                    {t.status === "active" ? "активен" : "отключён"}
-                                  </span>
+                                  <span className="text-gray-500">{t.full_name || "—"}</span>
+                                  <Status tone={t.status === "active" ? "green" : t.status === "pending" ? "amber" : "gray"}>
+                                    {t.status === "active" ? "Активен" : t.status === "pending" ? "Приглашён" : "Отключён"}
+                                  </Status>
                                   {t.status === "active" && (
                                     <button
                                       onClick={() => handleImpersonate(t)}
-                                      className="text-purple-600 hover:underline font-medium"
+                                      className="link"
                                     >
                                       Войти как учитель
                                     </button>
@@ -383,13 +375,13 @@ export default function SchoolsPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }

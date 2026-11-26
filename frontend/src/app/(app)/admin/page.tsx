@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { PageHeader, Stats, Status, type Tone } from "../ui";
 
 interface OrgStats {
   active: number;
@@ -28,11 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
   pending: "Приглашён",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  active: "bg-green-100 text-green-700",
-  inactive: "bg-gray-100 text-gray-500",
-  pending: "bg-yellow-100 text-yellow-600",
-};
+const STATUS_TONE: Record<string, Tone> = { active: "green", inactive: "gray", pending: "amber" };
 
 export default function AdminOverviewPage() {
   const router = useRouter();
@@ -57,139 +54,67 @@ export default function AdminOverviewPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const checksPct = stats
-    ? Math.min(100, (stats.checks_this_month / stats.monthly_quota) * 100)
-    : 0;
-
   return (
-    <div className="p-8">
-      <h1 className="text-xl font-semibold mb-6">Обзор школы</h1>
-
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        {/* Учителя */}
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Учительские аккаунты</p>
-          <p className="text-2xl font-bold mt-1">
-            {stats ? (
-              <span>
-                {stats.used}{" "}
-                <span className="text-base font-normal text-gray-400">
-                  из {stats.seats_limit}
-                </span>
-              </span>
-            ) : "—"}
-          </p>
-          {stats && (
-            <>
-              <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${Math.min(100, (stats.used / stats.seats_limit) * 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                {stats.active} активных · {stats.pending_invitations} ожидают · {stats.available} свободно
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Проверки */}
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Проверок в этом месяце</p>
-          <p className="text-2xl font-bold mt-1">
-            {stats ? (
-              <span>
-                {stats.checks_this_month}{" "}
-                <span className="text-base font-normal text-gray-400">
-                  из {stats.monthly_quota.toLocaleString()}
-                </span>
-              </span>
-            ) : "—"}
-          </p>
-          {stats && (
-            <>
-              <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${
-                    checksPct >= 90 ? "bg-red-400" : checksPct >= 70 ? "bg-yellow-400" : "bg-green-400"
-                  }`}
-                  style={{ width: `${checksPct}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                осталось {(stats.monthly_quota - stats.checks_this_month).toLocaleString()}
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Репозиторий */}
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Работ в репозитории</p>
-          <p className="text-2xl font-bold mt-1">
-            {repoTotal ?? "—"}
-          </p>
-        </div>
-
-        {/* Flagged */}
-        <div className="bg-white border rounded-xl p-4">
-          <p className="text-xs text-gray-500">Flagged за месяц</p>
-          <p className={`text-2xl font-bold mt-1 ${stats && stats.flagged_this_month > 0 ? "text-orange-500" : "text-gray-800"}`}>
-            {stats ? stats.flagged_this_month : "—"}
-          </p>
-          {stats && stats.flagged_this_month > 0 && (
-            <p className="text-xs text-orange-400 mt-1">проверок с обходом</p>
-          )}
-        </div>
-      </div>
+    <>
+      <PageHeader title="Обзор школы" />
+      <Stats
+        items={[
+          {
+            label: "Места учителей",
+            value: stats ? <>{stats.used} <span className="text-base font-normal text-gray-500">из {stats.seats_limit}</span></> : "—",
+            note: stats && `активны: ${stats.active}, ожидают: ${stats.pending_invitations}, свободно: ${stats.available}`,
+          },
+          {
+            label: "Проверок в этом месяце",
+            value: stats ? <>{stats.checks_this_month} <span className="text-base font-normal text-gray-500">из {stats.monthly_quota.toLocaleString("ru")}</span></> : "—",
+            note: stats && `осталось ${(stats.monthly_quota - stats.checks_this_month).toLocaleString("ru")}`,
+          },
+          { label: "Работ в репозитории", value: repoTotal ?? "—", note: "база для сравнения" },
+          { label: "Попытки обхода", value: stats ? stats.flagged_this_month : "—", note: "работ за месяц" },
+        ]}
+      />
 
       {/* Teachers table */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold">Учителя</h2>
-        <button
-          onClick={() => router.push("/admin/teachers")}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          Управлять →
+      <div className="section-title">
+        <h2>Учителя</h2>
+        <button onClick={() => router.push("/admin/teachers")} className="link">
+          Управлять
         </button>
       </div>
 
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Имя</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Статус</th>
-              <th className="px-4 py-3" />
+              <th>Имя</th>
+              <th>Email</th>
+              <th>Статус</th>
+              <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-400 text-sm">Загрузка...</td>
+                <td colSpan={4} className="table-empty">Загрузка...</td>
               </tr>
             ) : teachers.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-400 text-sm">
+                <td colSpan={4} className="table-empty">
                   Нет учителей. Перейдите в «Учителя» чтобы пригласить первого.
                 </td>
               </tr>
             ) : (
               teachers.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{t.full_name}</td>
-                  <td className="px-4 py-3 text-gray-500">{t.email}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[t.status] ?? "bg-gray-100 text-gray-500"}`}>
-                      {STATUS_LABEL[t.status] ?? t.status}
-                    </span>
+                <tr key={t.id}>
+                  <td className="font-medium text-gray-900">{t.full_name || "—"}</td>
+                  <td className="text-gray-500">{t.email}</td>
+                  <td>
+                    <Status tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status] ?? t.status}</Status>
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     <button
                       onClick={() => router.push("/admin/teachers")}
-                      className="text-xs text-blue-600 hover:underline"
+                      className="link"
                     >
                       Изменить
                     </button>
@@ -200,6 +125,6 @@ export default function AdminOverviewPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }

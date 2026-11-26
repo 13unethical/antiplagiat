@@ -17,17 +17,16 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from datetime import datetime, timezone
 
-import httpx
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.models.check import Check, CheckDocument, CheckFlag
 from app.models.match import CheckMatch
 from app.models.mt_segment import MTSegment
+from app.models.organization import Organization
 from app.models.repository_document import RepositoryDocument
 from app.models.web_search_log import WebSearchLog
 from app.services.ai_detector import detect_ai
@@ -41,6 +40,7 @@ from app.services.repository import index_to_repository
 from app.services.semantic_search import detect_semantic_plagiarism
 from app.services.stylometry import compute_stylometry
 from app.services.web_search import run_web_search
+from app.services.webhook import build_check_payload, fire_webhook
 
 
 async def process_check(check_id: uuid.UUID) -> None:
@@ -226,39 +226,30 @@ async def process_check(check_id: uuid.UUID) -> None:
                 ))
                 await db.commit()
 
-            if check.webhook_url:
-                await _fire_webhook(check)
+            await _after_check(check)
 
         except Exception as exc:
             check.status = "failed"
             check.error_message = str(exc)[:500]
             await db.commit()
 
-            if check.webhook_url:
-                await _fire_webhook(check)
+            await _after_check(check)
 
 
-async def _fire_webhook(check: Check) -> None:
-    payload = {
-        "id": str(check.id),
-        "status": check.status,
-        "filename": check.filename,
-        "work_title": check.work_title,
-        "student_name": check.student_name,
-        "group_name": check.group_name,
-        "similarity_percent": check.similarity_percent,
-        "similarity_sources_count": check.similarity_sources_count,
-        "word_count": check.word_count,
-        "language": check.language,
-        "error_message": check.error_message,
-        "completed_at": check.completed_at.isoformat() if check.completed_at else None,
-    }
+async def _after_check(check: Check) -> None:
+    """Fire LMS webhook and push Canvas originality report if linked."""
+    secret: str | None = None
+    async with AsyncSessionLocal() as db:
+        org_q = await db.execute(select(Organization).where(Organization.id == check.org_id))
+        org = org_q.scalar_one_or_none()
+        if org:
+            secret = org.webhook_secret
+
+    if check.webhook_url:
+        await fire_webhook(check.webhook_url, build_check_payload(check), secret=secret)
+
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
-                check.webhook_url,
-                content=json.dumps(payload),
-                headers={"Content-Type": "application/json", "X-Antiplagiat-Event": "check.completed"},
-            )
-    except Exception as exc:
-        print(f"[WEBHOOK] Failed to deliver to {check.webhook_url}: {exc}")
+        from app.services.canvas_report import push_originality_report
+        await push_originality_report(check)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[LTI] Canvas originality report failed for {check.id}: {exc}")

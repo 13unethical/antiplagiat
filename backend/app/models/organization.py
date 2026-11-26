@@ -30,3 +30,5 @@ class Organization(Base):
     require_student_name: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     require_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     report_footer: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    # HMAC secret for outbound webhooks (LMS callbacks)
+    webhook_secret: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

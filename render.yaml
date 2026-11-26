@@ -17,7 +17,7 @@ services:
           name: antiplagiat-db
           property: connectionString   # postgresql:// → нормализуется в приложении
       - key: FRONTEND_URL
-        sync: false        # вписать URL Vercel после деплоя фронтенда
+        value: https://markly.study
       - key: EMBED_MODEL
         value: BAAI/bge-small-en-v1.5   # лёгкая модель, чтобы не упасть по памяти
       - key: WEB_SEARCH_ENABLED

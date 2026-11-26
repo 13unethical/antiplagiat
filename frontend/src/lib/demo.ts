@@ -157,6 +157,78 @@ const demoGroups = [
   },
 ];
 
+const ago = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+
+const demoTeachers = [
+  { id: "t1", email: "n.karimova@school.uz", full_name: "Нодира Каримова", status: "active", personal_quota: 200, role: "teacher", org_id: "o1" },
+  { id: "t2", email: "o.saidov@school.uz", full_name: "Отабек Саидов", status: "active", personal_quota: null, role: "teacher", org_id: "o1" },
+  { id: "t3", email: "e.li@school.uz", full_name: "Елена Ли", status: "inactive", personal_quota: null, role: "teacher", org_id: "o1" },
+  { id: "t4", email: "b.yusupov@school.uz", full_name: "", status: "pending", personal_quota: null, role: "teacher", org_id: "o1" },
+];
+
+const demoOrgs = [
+  { id: "o1", name: "Школа № 14, Ташкент", plan: "standard", seats_limit: 10, monthly_quota: 1000, valid_until: "2027-06-30" },
+  { id: "o2", name: "Самаркандский лицей", plan: "pro", seats_limit: 30, monthly_quota: 5000, valid_until: null },
+];
+
+const demoSeats = { active: 2, pending_invitations: 1, used: 3, seats_limit: 10, available: 7 };
+
+const demoKey = { id: "k1", key_prefix: "sk-demo", is_active: true, created_at: ago(900), last_used_at: ago(5) };
+
+const demoDisputes = [
+  { id: "d1", check_id: "a41c09f2-demo", submitted_by: "t1", comment: "Студент писал работу на уроке, черновики сохранились", status: "pending", verdict: null, created_at: ago(20), resolved_at: null },
+  { id: "d2", check_id: "77be10d4-demo", submitted_by: "t2", comment: "Текст переведён самим студентом с узбекского", status: "reviewed", verdict: "human_written", created_at: ago(120), resolved_at: ago(90) },
+];
+
+const demoAudit = [
+  { id: "a1", user_id: "u1", action: "update_organization", resource_type: "organization", resource_id: "o1a2b3c4d5", details: { monthly_quota: 1000 }, created_at: ago(4) },
+  { id: "a2", user_id: "u1", action: "create_organization", resource_type: "organization", resource_id: "o2a2b3c4d5", details: { name: "Самаркандский лицей" }, created_at: ago(70) },
+];
+
+const demoAdmin: Record<string, unknown> = {
+  "/api/v1/org/stats": { ...demoSeats, monthly_quota: 1000, checks_this_month: 12, flagged_this_month: 2 },
+  "/api/v1/org/teachers": demoTeachers,
+  "/api/v1/org/teachers/stats": demoSeats,
+  "/api/v1/org/teachers/checks-stats": { t1: 8, t2: 4 },
+  "/api/v1/org/repository/stats": { total: 2 },
+  "/api/v1/org/repository": [
+    { id: "r1", check_id: "demo-1", work_title: "МСФО для малого бизнеса", student_name: "Иван Петров", group_name: "ФК-21", word_count: 3735, language: "ru", similarity_percent: 14, created_at: ago(30), teacher_email: "n.karimova@school.uz" },
+    { id: "r2", check_id: "demo-3", work_title: "Курсовая работа", student_name: "Алишер Усмонов", group_name: "ФК-22", word_count: 5120, language: "ru", similarity_percent: 31, created_at: ago(50), teacher_email: "o.saidov@school.uz" },
+  ],
+  "/api/v1/org/api-key": demoKey,
+  "/api/v1/admin/stats": { orgs_total: 2, teachers_total: 4, admins_total: 1, checks_this_month: 12, flagged_this_month: 2, web_queries_this_month: 86, web_urls_fetched_this_month: 240, web_matches_this_month: 31 },
+  "/api/v1/admin/organizations": demoOrgs,
+  "/api/v1/admin/users": [...demoTeachers, { id: "u2", email: "director@school.uz", full_name: "Дилшод Рахимов", role: "school_admin", org_id: "o1", status: "active" }],
+  "/api/v1/admin/flagged/stats": { flagged_this_month: 2, high_severity_this_month: 1, orgs_with_flagged: 1 },
+  "/api/v1/admin/flagged": [
+    { id: "demo-1", work_title: "МСФО для малого бизнеса", student_name: "Иван Петров", org_name: "Школа № 14, Ташкент", teacher_email: "n.karimova@school.uz", flags: ["homoglyph", "invisible_char"], severity: "high", created_at: ago(30) },
+    { id: "demo-2", work_title: "ИИ в образовании", student_name: "Мадина Каримова", org_name: "Школа № 14, Ташкент", teacher_email: "n.karimova@school.uz", flags: ["spaced_text"], severity: "medium", created_at: ago(40) },
+  ],
+  "/api/v1/admin/model-versions": [
+    { id: "m1", model_type: "ai_detector", version: "stub-v0", description: "Эвристика", is_active: true, metrics: {}, created_at: ago(2000) },
+    { id: "m2", model_type: "ai_detector", version: "v0.4-xlmr-large", description: "XLM-RoBERTa large", is_active: false, metrics: { fpr: 0.012, tpr_at_1pct: 0.83, f1: 0.88, dataset_size: 42000 }, created_at: ago(200) },
+  ],
+  "/api/v1/admin/dataset/stats": { human_written: 18, ai_generated: 12, machine_translated: 4 },
+  "/api/v1/admin/api-log/stats": { requests_today: 3, errors_today: 2, limit_hits_today: 1, avg_response_ms: 184 },
+  "/api/v1/admin/api-log": [
+    { id: "l1", org_name: "Самаркандский лицей", key_prefix: "sk-demo", method: "POST", path: "/api/v1/checks", status_code: 201, response_ms: 412, created_at: ago(1) },
+    { id: "l2", org_name: "Самаркандский лицей", key_prefix: "sk-demo", method: "GET", path: "/api/v1/checks/demo-1", status_code: 404, response_ms: 38, created_at: ago(2) },
+    { id: "l3", org_name: "Школа № 14, Ташкент", key_prefix: "sk-demo", method: "POST", path: "/api/v1/checks", status_code: 429, response_ms: 102, created_at: ago(3) },
+  ],
+  "/api/v1/admin/status": {
+    checked_at: new Date().toISOString(),
+    services: [
+      { name: "PostgreSQL", status: "ok", latency: "4 мс" },
+      { name: "OpenSearch", status: "ok", latency: "21 мс" },
+      { name: "Brave Search", status: "warn", detail: "Ключ не задан, веб-поиск отключён" },
+    ],
+  },
+  "/api/v1/corpus": [
+    { id: "c1", title: "Международные стандарты финансовой отчётности", url: "https://example.org/ifrs", language: "ru", source_type: "academic", word_count: 48200, created_at: ago(600) },
+    { id: "c2", title: "Oʻzbekiston tarixi", url: null, language: "uz-Latn", source_type: "book", word_count: 91400, created_at: ago(800) },
+  ],
+};
+
 const rndId = (p: string) => p + Math.random().toString(36).slice(2, 8);
 
 // Возвращает примерные данные по пути API. method — GET/POST/...; body — тело запроса (JSON-строка)
@@ -171,7 +243,23 @@ export function demoData(path: string, method = "GET", body?: string): unknown {
   if (p === "/api/v1/auth/me/stats")
     return { checks_this_month: 12, quota_limit: 1000, personal_quota: null, total_checks: 48 };
   if (p === "/api/v1/org/settings") return orgSettings;
-  if (p === "/api/v1/org/stats") return { teachers: 4, checks_this_month: 12, monthly_quota: 1000, seats_limit: 10 };
+  if (p in demoAdmin && method === "GET") return demoAdmin[p];
+  if (/^\/api\/v1\/admin\/organizations\/[^/]+$/.test(p) && method === "PATCH")
+    return { ...demoOrgs.find((o) => p.endsWith(`/${o.id}`)), ...payload };
+  if (/^\/api\/v1\/admin\/disputes\/[^/]+$/.test(p) && method === "PATCH")
+    return { ...demoDisputes.find((d) => p.endsWith(`/${d.id}`)), status: "reviewed", verdict: payload.verdict, resolved_at: new Date().toISOString() };
+  if (p === "/api/v1/admin/disputes") {
+    const status = new URLSearchParams(path.split("?")[1]).get("status");
+    return demoDisputes.filter((d) => !status || d.status === status);
+  }
+  if (p === "/api/v1/admin/audit-log") {
+    const action = new URLSearchParams(path.split("?")[1]).get("action");
+    return demoAudit.filter((a) => !action || a.action === action);
+  }
+  if (p === "/api/v1/org/checks") return sampleChecks.map((c) => ({ ...c, teacher_email: "n.karimova@school.uz" }));
+  if (p === "/api/v1/org/api-key/rotate")
+    return { ...demoKey, created_at: new Date().toISOString(), raw_key: "demo-key-not-real" };
+  if (/\/invitations$/.test(p) && method === "POST") return { token: "demo-invite" };
   if (p === "/api/v1/groups") {
     if (method === "POST")
       return { id: rndId("g-"), name: (payload.name as string) || "Новая группа", created_at: new Date().toISOString(), students: [] };
@@ -182,10 +270,26 @@ export function demoData(path: string, method = "GET", body?: string): unknown {
     return { id: rndId("s-"), name: (payload.name as string) || "Новый студент", checks_count: 0 };
   if (/^\/api\/v1\/groups\/[^/]+\/students\/[^/]+$/.test(p) && method === "DELETE") return {};
   if (/^\/api\/v1\/groups\/[^/]+$/.test(p) && method === "DELETE") return {};
-  if (p === "/api/v1/checks" && method === "POST") return { id: "demo-1", status: "done", filename: "demo.docx" };
-  if (p === "/api/v1/checks" && method === "GET") return sampleChecks;
+  if (p === "/api/v1/checks" && method === "POST") {
+    const n = sampleChecks.length;
+    const created = {
+      ...sampleChecks[sampleChecks.length - 1 - (n % 3)], id: `demo-${n + 1}`,
+      work_title: (payload.work_title as string) || "Без названия",
+      student_name: (payload.student_name as string) || "", student_id: (payload.student_id as string) || "",
+      group_name: (payload.group_name as string) || "", status: "processing",
+      created_at: new Date().toISOString(),
+    };
+    sampleChecks.unshift(created);
+    setTimeout(() => {
+      created.status = "done";
+      created.completed_at = new Date().toISOString();
+    }, 2500);
+    return { id: created.id, status: created.status, filename: created.filename };
+  }
+  if (p === "/api/v1/checks" && method === "GET") return sampleChecks.map((c) => ({ ...c }));
   if (p.startsWith("/api/v1/checks/") && method === "GET") {
-    return { ...sampleReport, id: p.split("/").pop() || "demo-1" };
+    const id = p.split("/").pop() || "demo-1";
+    return { ...sampleReport, ...(id === "demo-1" ? {} : sampleChecks.find((c) => c.id === id)), id };
   }
 
   // Безопасные значения по умолчанию, чтобы страницы не падали

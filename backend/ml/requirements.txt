@@ -1,10 +1,11 @@
-# Зависимости ТОЛЬКО для обучения (на GPU/Colab). В проде не нужны.
-transformers>=4.44
-datasets>=2.20
+# Зависимости ТОЛЬКО для обучения ИИ-детектора. В проде не нужны.
+# Пины подобраны под transformers 4.46 (в train.py используется Trainer(tokenizer=...),
+# в 5.x этот аргумент убрали). Ставить в отдельное venv: backend/ml/.venv
 torch>=2.2
+transformers==4.46.3
+datasets>=2.20,<4
 scikit-learn>=1.4
 accelerate>=0.33
-optimum[onnxruntime]>=1.21
-# опционально для --gen-llm:
-# anthropic
-# openai
+sentencepiece>=0.2
+# ONNX-экспорт ставится отдельно (requirements-export.txt), чтобы optimum
+# не конфликтовал с transformers>=4.44 при разрешении зависимостей.

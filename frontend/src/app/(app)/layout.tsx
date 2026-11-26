@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { getUser, clearAuth } from "@/lib/auth";
+import { DEMO } from "@/lib/demo";
 import type { AuthUser } from "@/lib/auth";
+import { Icon, Logo, type IconName } from "./ui";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -21,52 +23,64 @@ function stopImpersonation() {
 }
 
 function ImpersonationBanner() {
-  const [name, setName] = useState<string | null>(null);
-
-  useEffect(() => {
-    setName(localStorage.getItem("impersonation_target_name"));
-  }, []);
-
-  if (!name) return null;
-
-  return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-purple-600 text-white text-xs px-4 py-2 flex items-center justify-between">
-      <span>Вы вошли от имени: <strong>{name}</strong></span>
-      <button onClick={stopImpersonation} className="underline hover:no-underline ml-4">
-        Вернуться к суперадмину
-      </button>
-    </div>
-  );
+  // Плашку убрали по просьбе: возврат к суперадмину — в переключателе ролей сайдбара.
+  return null;
 }
 
 interface PickerUser { id: string; email: string; full_name: string; role: string; status: string; }
 
-function RoleSwitcher({ currentRole }: { currentRole: AuthUser["role"] }) {
-  const [pickerRole, setPickerRole] = useState<"school_admin" | "teacher" | null>(null);
+const ROLES: { key: AuthUser["role"]; label: string; icon: IconName; home: string }[] = [
+  { key: "superadmin", label: "Суперадмин", icon: "shield", home: "/super" },
+  { key: "school_admin", label: "Администратор", icon: "grid", home: "/admin" },
+  { key: "teacher", label: "Учитель", icon: "user", home: "/checks/new" },
+];
+
+function AccountMenu({ user }: { user: AuthUser }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pickerRole, setPickerRole] = useState<AuthUser["role"] | null>(null);
   const [pickerUsers, setPickerUsers] = useState<PickerUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const isImpersonating = typeof window !== "undefined" &&
-    !!localStorage.getItem("impersonation_original_token");
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
-  const roles: { key: AuthUser["role"]; label: string }[] = [
-    { key: "superadmin", label: "Супер" },
-    { key: "school_admin", label: "Админ" },
-    { key: "teacher", label: "Учитель" },
-  ];
+  useEffect(() => setOpen(false), [pathname]);
 
-  async function handleClick(role: AuthUser["role"]) {
-    if (role === currentRole) return;
+  useEffect(() => {
+    if (!open) {
+      setPickerRole(null);
+      return;
+    }
+    setIsImpersonating(!!localStorage.getItem("impersonation_original_token"));
+    function onPointer(e: PointerEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
-    // Go back to superadmin
-    if (role === "superadmin") {
-      if (isImpersonating) stopImpersonation();
+  const canSwitch = DEMO || user.role === "superadmin";
+
+  async function switchRole(role: AuthUser["role"]) {
+    if (role === user.role) return;
+
+    if (DEMO) {
+      localStorage.setItem("user", JSON.stringify({ ...user, role }));
+      window.location.href = ROLES.find((r) => r.key === role)!.home;
       return;
     }
 
-    // Switch from impersonated role to another — not allowed
-    if (currentRole !== "superadmin") return;
-
-    // Superadmin → open picker for selected role
     if (pickerRole === role) { setPickerRole(null); return; }
 
     setPickerRole(role);
@@ -81,6 +95,7 @@ function RoleSwitcher({ currentRole }: { currentRole: AuthUser["role"] }) {
         const all: PickerUser[] = await res.json();
         setPickerUsers(all.filter((u) => u.role === role && u.status === "active"));
       }
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -113,86 +128,129 @@ function RoleSwitcher({ currentRole }: { currentRole: AuthUser["role"] }) {
     } catch {}
   }
 
-  return (
-    <div className="mb-3">
-      <p className="text-xs text-gray-400 mb-1.5">Переключить роль</p>
-      <div className="flex gap-1">
-        {roles.map(({ key, label }) => {
-          const isActive = key === currentRole;
-          const disabled = !isActive && currentRole !== "superadmin" && key !== "superadmin";
-          return (
-            <button
-              key={key}
-              onClick={() => !disabled && handleClick(key)}
-              disabled={disabled}
-              className={`text-xs px-2 py-1 rounded flex-1 transition-colors ${
-                isActive
-                  ? "bg-blue-600 text-white font-medium"
-                  : disabled
-                  ? "bg-gray-50 text-gray-300 cursor-not-allowed"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+  const row = "w-full flex items-center gap-2.5 min-h-9 px-2.5 rounded-[10px] text-sm text-left text-gray-800 hover:bg-gray-100 transition-colors";
 
-      {pickerRole && (
-        <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-          {loading ? (
-            <p className="text-xs text-gray-400 px-3 py-2">Загрузка...</p>
-          ) : pickerUsers.length === 0 ? (
-            <p className="text-xs text-gray-400 px-3 py-2">Нет активных пользователей</p>
-          ) : (
-            pickerUsers.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => impersonate(u)}
-                className="w-full text-left px-3 py-2 hover:bg-white text-xs border-b border-gray-100 last:border-0 transition-colors"
-              >
-                <p className="text-gray-800 font-medium truncate">{u.full_name || u.email}</p>
-                <p className="text-gray-400 truncate">{u.email}</p>
-              </button>
-            ))
+  return (
+    <div ref={rootRef} className="relative p-2">
+      {open && (
+        <div className="absolute inset-x-2 bottom-full max-h-[70dvh] overflow-y-auto p-1.5 bg-white rounded-2xl shadow-[0_0_0_1px_rgba(24,24,27,0.05),0_2px_4px_rgba(24,24,27,0.03),0_8px_16px_rgba(24,24,27,0.04),0_24px_48px_rgba(24,24,27,0.08)]">
+          <Link href="/settings" onClick={() => setOpen(false)} className={row}>
+            <Icon name="settings" className="text-gray-500" />
+            Настройки
+          </Link>
+
+          {isImpersonating && (
+            <button type="button" onClick={stopImpersonation} className={row}>
+              <Icon name="shield" className="text-gray-500" />
+              Вернуться к суперадмину
+            </button>
           )}
+
+          {canSwitch && !isImpersonating && (
+            <div className="my-1 py-1 border-y">
+              <p className="px-2.5 py-1 text-xs text-gray-500">Войти как</p>
+              {ROLES.map((r) => (
+                <div key={r.key}>
+                  <button
+                    type="button"
+                    onClick={() => switchRole(r.key)}
+                    aria-current={r.key === user.role ? "true" : undefined}
+                    aria-expanded={!DEMO && r.key !== user.role ? pickerRole === r.key : undefined}
+                    className={`${row} ${r.key === user.role ? "font-medium" : ""}`}
+                  >
+                    <Icon name={r.icon} className="text-gray-500" />
+                    <span className="flex-1">{r.label}</span>
+                    {r.key === user.role && <Icon name="check" className="text-green-600" />}
+                    {!DEMO && r.key !== user.role && (
+                      <Icon name="chevron" className={`text-gray-400 ${pickerRole === r.key ? "rotate-180" : ""}`} />
+                    )}
+                  </button>
+                  {pickerRole === r.key && (
+                    <div className="max-h-48 overflow-y-auto pl-6">
+                      {loading ? (
+                        <p className="text-xs text-gray-500 px-2.5 py-2">Загрузка...</p>
+                      ) : pickerUsers.length === 0 ? (
+                        <p className="text-xs text-gray-500 px-2.5 py-2">Нет активных пользователей</p>
+                      ) : (
+                        pickerUsers.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => impersonate(u)}
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-100 text-xs transition-colors"
+                          >
+                            <p className="text-gray-800 font-medium truncate">{u.full_name || u.email}</p>
+                            <p className="text-gray-500 truncate">{u.email}</p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => { clearAuth(); router.replace("/login"); }}
+            className={`${row} !text-red-700`}
+          >
+            <Icon name="logout" />
+            Выйти
+          </button>
         </div>
       )}
+
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={`w-full flex items-center gap-2.5 p-2 mt-1 rounded-xl text-left transition-colors ${open ? "bg-[#e7e7ea]" : "hover:bg-[#ededf0]"}`}
+      >
+        <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold flex items-center justify-center shrink-0">
+          {(user.full_name || user.email).slice(0, 1).toUpperCase()}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium truncate">{user.full_name || user.email}</span>
+          <span className="block text-xs text-gray-500">{ROLE_LABELS[user.role]}</span>
+        </span>
+        <Icon name="updown" className="text-gray-500" />
+      </button>
     </div>
   );
 }
 
-type NavItem = { href: string; label: string; soon?: boolean };
+type NavItem = { href: string; label: string; icon: IconName; soon?: boolean };
 
 const NAV: Record<AuthUser["role"], NavItem[]> = {
   teacher: [
-    { href: "/checks/new", label: "Новая проверка" },
-    { href: "/checks", label: "История проверок" },
-    { href: "/groups", label: "Группы и классы" },
-    { href: "/settings", label: "Настройки" },
-    { href: "/profile", label: "Профиль" },
+    { href: "/checks/new", label: "Новая проверка", icon: "plus" },
+    { href: "/checks", label: "История проверок", icon: "clock" },
+    { href: "/groups", label: "Группы и классы", icon: "users" },
+    { href: "/settings", label: "Настройки", icon: "settings" },
   ],
   school_admin: [
-    { href: "/admin", label: "Обзор школы" },
-    { href: "/admin/teachers", label: "Учителя" },
-    { href: "/admin/checks", label: "Все проверки школы" },
-    { href: "/admin/repository", label: "Репозиторий работ" },
-    { href: "/admin/api-keys", label: "API-ключи" },
-    { href: "/admin/settings", label: "Настройки по умолчанию" },
-    { href: "/profile", label: "Профиль" },
+    { href: "/admin", label: "Обзор школы", icon: "grid" },
+    { href: "/admin/teachers", label: "Учителя", icon: "users" },
+    { href: "/admin/checks", label: "Все проверки школы", icon: "clock" },
+    { href: "/admin/repository", label: "Репозиторий работ", icon: "library" },
+    { href: "/admin/api-keys", label: "API-ключи", icon: "key" },
+    { href: "/admin/integrations", label: "Интеграции LMS", icon: "server" },
+    { href: "/settings", label: "Настройки", icon: "settings" },
   ],
   superadmin: [
-    { href: "/super", label: "Обзор" },
-    { href: "/super/schools", label: "Школы и админы" },
-    { href: "/super/corpus", label: "Корпус антиплагиата" },
-    { href: "/super/plans", label: "Тарифы и лимиты" },
-    { href: "/super/flagged", label: "Flagged: попытки обхода" },
-    { href: "/super/disputes", label: "Спорные результаты" },
-    { href: "/super/models", label: "Модели детектора" },
-    { href: "/super/audit", label: "Аудит действий" },
-    { href: "/super/api-log", label: "API и журнал запросов" },
-    { href: "/super/status", label: "Состояние системы" },
+    { href: "/super", label: "Обзор", icon: "grid" },
+    { href: "/super/schools", label: "Школы и админы", icon: "school" },
+    { href: "/super/corpus", label: "Корпус антиплагиата", icon: "library" },
+    { href: "/super/plans", label: "Тарифы и лимиты", icon: "plans" },
+    { href: "/super/flagged", label: "Попытки обхода", icon: "flag" },
+    { href: "/super/disputes", label: "Спорные результаты", icon: "question" },
+    { href: "/super/models", label: "Модели детектора", icon: "cpu" },
+    { href: "/super/audit", label: "Аудит действий", icon: "audit" },
+    { href: "/super/api-log", label: "API и журнал запросов", icon: "server" },
+    { href: "/super/status", label: "Состояние системы", icon: "activity" },
   ],
 };
 
@@ -206,6 +264,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => setMenuOpen(false), [pathname]);
 
   useEffect(() => {
     const u = getUser();
@@ -228,58 +289,64 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
       <ImpersonationBanner />
-      {/* Sidebar */}
-      <aside className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col fixed top-0 left-0 h-screen z-10">
-        {/* Logo */}
-        <div className="px-5 py-4 border-b border-gray-100">
-          <span className="font-bold text-gray-900 text-sm">Антиплагиат</span>
+      <header className="md:hidden fixed top-0 inset-x-0 h-14 z-20 bg-canvas border-b flex items-center justify-between px-4">
+        <Logo />
+        <button
+          type="button"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Закрыть меню" : "Меню"}
+          className="p-3 -mr-3 text-gray-700"
+        >
+          <Icon name={menuOpen ? "close" : "menu"} />
+        </button>
+      </header>
+      {menuOpen && <div className="md:hidden fixed inset-0 z-[9] bg-black/30" onClick={() => setMenuOpen(false)} />}
+
+      <aside
+        className={`w-60 bg-canvas flex-col fixed top-0 left-0 h-dvh z-10 pt-14 md:pt-0 md:flex border-r md:border-r-0 ${
+          menuOpen ? "flex" : "hidden"
+        }`}
+      >
+        <div className="hidden md:flex items-center gap-2 h-14 px-4">
+          <Logo />
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 py-2 overflow-y-auto">
+        <nav className="flex-1 px-2 py-2 md:pt-0 space-y-0.5 overflow-y-auto">
           {nav.map((item) =>
             item.soon ? (
               <span
                 key={item.href}
-                className="flex items-center px-5 py-2.5 text-sm text-gray-300 cursor-not-allowed select-none"
+                className="flex items-center gap-2.5 h-8 px-2 text-sm text-gray-400 cursor-not-allowed select-none"
               >
+                <Icon name={item.icon} />
                 {item.label}
               </span>
             ) : (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center px-5 py-2.5 text-sm transition-colors ${
+                aria-current={isActive(item.href) ? "page" : undefined}
+                className={`flex items-center gap-2.5 h-8 px-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
-                    ? "bg-blue-50 text-blue-700 font-medium border-r-2 border-blue-600"
-                    : "text-gray-700 hover:bg-gray-50"
+                    ? "bg-[#e7e7ea] text-gray-900"
+                    : "text-gray-600 hover:bg-[#ededf0] hover:text-gray-900"
                 }`}
               >
+                <Icon name={item.icon} className={isActive(item.href) ? "text-gray-800" : "text-gray-500"} />
                 {item.label}
               </Link>
             )
           )}
         </nav>
 
-        {/* User */}
-        <div className="border-t border-gray-100 px-5 py-4">
-          <p className="text-xs font-medium text-gray-700">{ROLE_LABELS[user.role]}</p>
-          <p className="text-xs text-gray-400 mt-0.5 truncate mb-3">{user.full_name}</p>
-          <RoleSwitcher currentRole={user.role} />
-          <button
-            onClick={() => { clearAuth(); router.replace("/login"); }}
-            className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            Выйти
-          </button>
-        </div>
+        <AccountMenu user={user} />
       </aside>
 
-      {/* Main */}
-      <div className="flex-1 ml-56 min-h-screen">
-        {children}
+      <div className="md:ml-60 pt-14 md:pt-6 min-h-screen flex">
+        <main className="flex-1 min-w-0 bg-white md:rounded-tl-[16px]">{children}</main>
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ from app.services.email import send_invitation_email
 from app.models.api_key import ApiKey
 from app.models.check import Check, CheckFlag
 from app.models.invitation import Invitation
+from app.models.lti import LtiPlatform, LtiSubmission
 from app.models.organization import Organization
 from app.models.repository_document import RepositoryDocument
 from app.models.user import User
@@ -519,3 +520,215 @@ async def update_org_settings(
     await db.commit()
     await db.refresh(org)
     return org
+
+
+# ─── LMS integrations (Moodle / Canvas / webhook secret) ──────────────────────
+
+class WebhookSecretOut(BaseModel):
+    webhook_secret: Optional[str] = None
+    has_secret: bool = False
+
+
+class WebhookSecretCreated(BaseModel):
+    webhook_secret: str
+
+
+class LtiPlatformOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    platform_type: str
+    issuer: str
+    client_id: str
+    deployment_ids: list
+    jwks_url: Optional[str] = None
+    auth_login_url: Optional[str] = None
+    auth_token_url: Optional[str] = None
+    api_base_url: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LtiPlatformCreate(BaseModel):
+    name: str
+    platform_type: str = "canvas"  # canvas | moodle | generic
+    issuer: str
+    client_id: str
+    deployment_ids: list[str] = []
+    jwks_url: Optional[str] = None
+    auth_login_url: Optional[str] = None
+    auth_token_url: Optional[str] = None
+    api_base_url: Optional[str] = None
+
+
+class LtiSubmissionOut(BaseModel):
+    id: uuid.UUID
+    platform_id: uuid.UUID
+    check_id: Optional[uuid.UUID] = None
+    external_assignment_id: str
+    external_submission_id: str
+    student_lms_id: Optional[str] = None
+    student_name: Optional[str] = None
+    report_status: str
+    error_message: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class IntegrationsOverview(BaseModel):
+    api_public_url: str
+    frontend_url: str
+    jwks_url: str
+    oidc_login_url: str
+    launch_url: str
+    canvas_config_url: str
+    webhook_secret_set: bool
+    has_api_key: bool
+    platforms: list[LtiPlatformOut]
+    recent_submissions: list[LtiSubmissionOut]
+
+
+@router.get("/integrations", response_model=IntegrationsOverview)
+async def get_integrations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    org_q = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org = org_q.scalar_one()
+
+    key_q = await db.execute(
+        select(ApiKey)
+        .where(ApiKey.org_id == current_user.org_id, ApiKey.is_active == True)  # noqa: E712
+        .limit(1)
+    )
+    platforms_q = await db.execute(
+        select(LtiPlatform)
+        .where(LtiPlatform.org_id == current_user.org_id)
+        .order_by(LtiPlatform.created_at.desc())
+    )
+    platforms = platforms_q.scalars().all()
+
+    platform_ids = [p.id for p in platforms]
+    recent: list[LtiSubmission] = []
+    if platform_ids:
+        sub_q = await db.execute(
+            select(LtiSubmission)
+            .where(LtiSubmission.platform_id.in_(platform_ids))
+            .order_by(LtiSubmission.created_at.desc())
+            .limit(20)
+        )
+        recent = list(sub_q.scalars().all())
+
+    base = settings.API_PUBLIC_URL.rstrip("/")
+    return IntegrationsOverview(
+        api_public_url=base,
+        frontend_url=settings.FRONTEND_URL.rstrip("/"),
+        jwks_url=f"{base}/.well-known/jwks.json",
+        oidc_login_url=f"{base}/api/v1/lti/oidc/login",
+        launch_url=f"{base}/api/v1/lti/launch",
+        canvas_config_url=f"{base}/api/v1/lti/config/canvas.json",
+        webhook_secret_set=bool(org.webhook_secret),
+        has_api_key=key_q.scalar_one_or_none() is not None,
+        platforms=platforms,
+        recent_submissions=recent,
+    )
+
+
+@router.get("/integrations/webhook-secret", response_model=WebhookSecretOut)
+async def get_webhook_secret_meta(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    org_q = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org = org_q.scalar_one()
+    # Secret is shown only right after rotation; meta endpoint never returns it again.
+    return WebhookSecretOut(webhook_secret=None, has_secret=bool(org.webhook_secret))
+
+
+@router.post("/integrations/webhook-secret/rotate", response_model=WebhookSecretCreated, status_code=201)
+async def rotate_webhook_secret(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    org_q = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org = org_q.scalar_one()
+    secret = "whsec_" + secrets.token_urlsafe(32)
+    org.webhook_secret = secret
+    await db.commit()
+    return WebhookSecretCreated(webhook_secret=secret)
+
+
+@router.get("/integrations/platforms", response_model=list[LtiPlatformOut])
+async def list_lti_platforms(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    result = await db.execute(
+        select(LtiPlatform)
+        .where(LtiPlatform.org_id == current_user.org_id)
+        .order_by(LtiPlatform.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/integrations/platforms", response_model=LtiPlatformOut, status_code=201)
+async def create_lti_platform(
+    data: LtiPlatformCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    if data.platform_type not in ("canvas", "moodle", "generic"):
+        raise HTTPException(400, "platform_type must be canvas, moodle, or generic")
+    platform = LtiPlatform(
+        id=uuid.uuid4(),
+        org_id=current_user.org_id,
+        name=data.name.strip(),
+        platform_type=data.platform_type,
+        issuer=data.issuer.strip(),
+        client_id=data.client_id.strip(),
+        deployment_ids=data.deployment_ids or [],
+        jwks_url=data.jwks_url,
+        auth_login_url=data.auth_login_url,
+        auth_token_url=data.auth_token_url,
+        api_base_url=data.api_base_url,
+    )
+    db.add(platform)
+    await db.commit()
+    await db.refresh(platform)
+    return platform
+
+
+@router.delete("/integrations/platforms/{platform_id}", status_code=204)
+async def delete_lti_platform(
+    platform_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    platform = await db.get(LtiPlatform, platform_id)
+    if not platform or platform.org_id != current_user.org_id:
+        raise HTTPException(404, "Platform not found")
+    await db.delete(platform)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/integrations/submissions", response_model=list[LtiSubmissionOut])
+async def list_lti_submissions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    platforms_q = await db.execute(
+        select(LtiPlatform.id).where(LtiPlatform.org_id == current_user.org_id)
+    )
+    ids = [row[0] for row in platforms_q.all()]
+    if not ids:
+        return []
+    result = await db.execute(
+        select(LtiSubmission)
+        .where(LtiSubmission.platform_id.in_(ids))
+        .order_by(LtiSubmission.created_at.desc())
+        .limit(50)
+    )
+    return result.scalars().all()

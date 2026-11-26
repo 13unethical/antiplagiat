@@ -49,7 +49,7 @@ async function apiFetchInternal<T>(
   const token = authToken ?? getStoredToken();
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(fetchOptions.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(fetchOptions.headers as Record<string, string>),
   };
@@ -89,7 +89,12 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   if (DEMO) {
     await new Promise((r) => setTimeout(r, 150));
-    const body = typeof options.body === "string" ? options.body : undefined;
+    const body =
+      options.body instanceof FormData
+        ? JSON.stringify(Object.fromEntries(Array.from(options.body.entries()).filter(([, v]) => typeof v === "string")))
+        : typeof options.body === "string"
+        ? options.body
+        : undefined;
     return demoData(path, (options.method ?? "GET").toUpperCase(), body) as T;
   }
   return apiFetchInternal<T>(path, options, false);

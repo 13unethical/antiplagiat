@@ -1,46 +1,105 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { DEMO } from "@/lib/demo";
+import { Icon, PageHeader, Ring } from "../../ui";
+import { matchAuthor, type RosterStudent } from "@/lib/matchAuthor";
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MIN_TEXT = 50;
+const MAX_TEXT = 500_000;
+const COLLAPSE_AFTER = 5;
+
+type Item = {
+  key: string;
+  file: File | null;
+  text: string;
+  title: string;
+  author: string | null; // null — автор ещё не подтверждён и не исправлен вручную
+  studentId: string;
+  coauthors: { key: string; name: string; id: string }[];
+};
+
+type Job = {
+  key: string;
+  label: string;
+  item: Item;
+  author: string;
+  state: "waiting" | "uploading" | "processing" | "done" | "failed";
+  checkId?: string;
+  similarity?: number | null;
+  flags?: number;
+  error?: string;
+};
+
+type Group = { id: string; name: string; students: { id: string; name: string }[] };
+
+type CheckRow = {
+  id: string;
+  status: string;
+  similarity_percent: number | null;
+  flag_count: number;
+};
+
+const EMPTY_DRAFT: Item = { key: "draft", file: null, text: "", title: "", author: null, studentId: "", coauthors: [] };
+
+const labelCls = "block text-xs font-medium text-gray-600 mb-1.5";
+
+const inputCls =
+  "w-full h-9 border border-gray-300 rounded-lg px-3 text-sm bg-white transition-colors hover:border-gray-400/60 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200";
+
+function plural(n: number, one: string, few: string, many: string) {
+  const a = n % 10;
+  const b = n % 100;
+  if (a === 1 && b !== 11) return one;
+  if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return few;
+  return many;
+}
+
+const works = (n: number) => `${n} ${plural(n, "работу", "работы", "работ")}`;
 
 export default function NewCheckPage() {
-  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [inputMode, setInputMode] = useState<"file" | "text">("file");
-  const [file, setFile] = useState<File | null>(null);
-  const [textContent, setTextContent] = useState("");
+  const [items, setItems] = useState<Item[]>([]);
+  const [rejected, setRejected] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+  const [textMode, setTextMode] = useState(false);
+  // Вставленный текст и поля, заполненные до загрузки файла
+  const [draft, setDraft] = useState<Item>(EMPTY_DRAFT);
 
-  // form fields
-  const [title, setTitle] = useState("");
-  const [student, setStudent] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [group, setGroup] = useState("");
+  const [group, setGroup] = useState<string | null>(null); // null — подставляем сами
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [showReady, setShowReady] = useState(false);
+
   const [excludeQuotes, setExcludeQuotes] = useState(true);
   const [excludeBiblio, setExcludeBiblio] = useState(true);
+  const [minWords, setMinWords] = useState(8);
   const [saveToRepo, setSaveToRepo] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [requireStudent, setRequireStudent] = useState(false);
   const [requireGroup, setRequireGroup] = useState(false);
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+  const remaining = quota ? Math.max(0, quota.limit - quota.used) : null;
 
-  // Load quota info
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
-    apiFetch<{ checks_this_month: number; quota_limit: number | null; personal_quota: number | null }>(
-      "/api/v1/auth/me/stats"
-    )
-      .then((s) => setQuotaInfo({ checks_this_month: s.checks_this_month, quota_limit: s.quota_limit }))
+    apiFetch<Group[]>("/api/v1/groups").then(setGroups).catch(() => {});
+    apiFetch<{ checks_this_month: number; quota_limit: number | null }>("/api/v1/auth/me/stats")
+      .then((s) => {
+        if (s.quota_limit !== null) setQuota({ used: s.checks_this_month, limit: s.quota_limit });
+      })
       .catch(() => {});
-  }, []);
-
-  // Load org defaults
-  useEffect(() => {
     apiFetch<{
       default_exclude_quotes: boolean;
       default_exclude_bibliography: boolean;
       default_save_to_repository: boolean;
+      default_min_match_words: number;
       require_student_name: boolean;
       require_group: boolean;
     }>("/api/v1/org/settings")
@@ -48,594 +107,829 @@ export default function NewCheckPage() {
         setExcludeQuotes(s.default_exclude_quotes);
         setExcludeBiblio(s.default_exclude_bibliography);
         setSaveToRepo(s.default_save_to_repository);
+        setMinWords(s.default_min_match_words);
         setRequireStudent(s.require_student_name);
         setRequireGroup(s.require_group);
       })
       .catch(() => {});
   }, []);
-  const [quotaInfo, setQuotaInfo] = useState<{
-    checks_this_month: number;
-    quota_limit: number | null;
-  } | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // ── Групповая (пакетная) проверка ────────────────────────────────────────
-  type GroupRow = { key: string; name: string; studentId: string; file: File | null };
-  type BatchResult = {
-    key: string;
-    name: string;
-    checkId?: string;
-    status: "pending" | "running" | "done" | "error";
-    error?: string;
-  };
-  const [checkMode, setCheckMode] = useState<"single" | "group">("single");
-  const [rows, setRows] = useState<GroupRow[]>([
-    { key: crypto.randomUUID(), name: "", studentId: "", file: null },
-    { key: crypto.randomUUID(), name: "", studentId: "", file: null },
-  ]);
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
+  const draftLength = draft.text.trim().length;
+  const draftReady = draftLength >= MIN_TEXT && draftLength <= MAX_TEXT;
+  const all = draftReady ? [...items, draft] : items;
 
-  function addRow() {
-    setRows((r) => [...r, { key: crypto.randomUUID(), name: "", studentId: "", file: null }]);
-  }
-  function removeRow(key: string) {
-    setRows((r) => (r.length <= 1 ? r : r.filter((x) => x.key !== key)));
-  }
-  function updateRow(key: string, patch: Partial<GroupRow>) {
-    setRows((r) => r.map((x) => (x.key === key ? { ...x, ...patch } : x)));
-  }
+  const allStudents = useMemo<RosterStudent[]>(
+    () => groups.flatMap((g) => g.students.map((s) => ({ name: s.name, group: g.name }))),
+    [groups]
+  );
 
-  async function runBatch() {
-    const ready = rows.filter((r) => r.file && r.name.trim());
-    if (ready.length === 0) {
-      setError("Добавьте хотя бы одного студента с именем и файлом");
-      return;
-    }
-    setError("");
-    setBatchRunning(true);
-    setBatchResults(ready.map((r) => ({ key: r.key, name: r.name.trim(), status: "pending" })));
-    if (DEMO) {
-      for (const r of ready) {
-        await new Promise((res) => setTimeout(res, 500));
-        setBatchResults((prev) =>
-          prev.map((b) => (b.key === r.key ? { ...b, status: "done", checkId: "demo-1" } : b))
-        );
-      }
-      setBatchRunning(false);
-      return;
-    }
-    const token = localStorage.getItem("access_token");
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-    for (const r of ready) {
-      setBatchResults((prev) =>
-        prev.map((b) => (b.key === r.key ? { ...b, status: "running" } : b))
-      );
-      try {
-        const form = new FormData();
-        form.append("file", r.file!);
-        form.append("work_title", r.name.trim());
-        form.append("student_name", r.name.trim());
-        if (r.studentId.trim()) form.append("student_id", r.studentId.trim());
-        if (group) form.append("group_name", group);
-        form.append("save_to_repository", String(saveToRepo));
-        form.append("exclude_quotes", String(excludeQuotes));
-        form.append("exclude_bibliography", String(excludeBiblio));
-        const res = await fetch(`${apiBase}/api/v1/checks`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: form,
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail ?? "Ошибка загрузки");
+  // Если все точно узнанные студенты из одной группы, подставляем её
+  const suggestedGroup = useMemo(() => {
+    const found = items
+      .flatMap((i) => {
+        if (i.author !== null) {
+          const same = allStudents.filter((s) => s.name === i.author!.trim());
+          return same.length === 1 ? [same[0].group] : [];
         }
-        const check = await res.json();
-        setBatchResults((prev) =>
-          prev.map((b) => (b.key === r.key ? { ...b, status: "done", checkId: check.id } : b))
-        );
-      } catch (err) {
-        setBatchResults((prev) =>
-          prev.map((b) =>
-            b.key === r.key
-              ? { ...b, status: "error", error: err instanceof Error ? err.message : "Ошибка" }
-              : b
-          )
-        );
+        const m = matchAuthor(i.file?.name ?? "", allStudents);
+        return m.level === "exact" && m.group ? [m.group] : [];
+      });
+    return found.length > 0 && new Set(found).size === 1 ? found[0] : "";
+  }, [items, allStudents]);
+
+  const groupName = (group ?? suggestedGroup).trim();
+  const roster = useMemo(() => {
+    const own = allStudents.filter((s) => s.group === groupName);
+    return own.length > 0 ? own : allStudents;
+  }, [allStudents, groupName]);
+
+  const rows = all.map((item) => {
+    const match = matchAuthor(item.file?.name ?? "", roster);
+    const author = (item.author ?? match.name).trim();
+    const unconfirmed = item.author === null && match.level === "guess";
+    const missing = requireStudent && !author;
+    return {
+      item,
+      match,
+      author,
+      unconfirmed,
+      missing,
+      // раздел строки зависит только от автоподбора, чтобы она не прыгала во время правки
+      review: match.level === "guess" || (match.level === "none" && (requireStudent || all.length > 1)),
+      problem: unconfirmed || missing,
+    };
+  });
+  const review = rows.filter((r) => r.review);
+  const ready = rows.filter((r) => !r.review);
+  const problems = rows.filter((r) => r.problem).length;
+  const unconfirmed = rows.filter((r) => r.unconfirmed).length;
+
+  const single = all.length > 1 ? null : all[0] ?? draft;
+  const singleRow = all.length === 1 ? rows[0] : null;
+
+  const blocker =
+    draftLength > 0 && !draftReady
+      ? draftLength < MIN_TEXT
+        ? `Вставленный текст слишком короткий: нужно ещё ${MIN_TEXT - draftLength} симв.`
+        : "Вставленный текст длиннее 500 000 символов"
+      : all.length === 0
+      ? "Добавьте хотя бы одну работу"
+      : requireGroup && !groupName
+      ? "Укажите группу: этого требуют настройки школы"
+      : rows.some((r) => r.missing)
+      ? "Укажите автора каждой работы: этого требуют настройки школы"
+      : unconfirmed > 0
+      ? `Подтвердите авторов: ${unconfirmed}`
+      : remaining !== null && all.length > remaining
+      ? `Не хватает лимита: доступно ${remaining}, выбрано ${all.length}`
+      : "";
+
+  function addFiles(list: FileList | File[]) {
+    const bad: string[] = [];
+    const next: Item[] = [];
+    const seen = new Set(items.filter((i) => i.file).map((i) => `${i.file!.name}:${i.file!.size}`));
+    for (const f of Array.from(list)) {
+      const id = `${f.name}:${f.size}`;
+      if (!/\.(docx|pdf)$/i.test(f.name)) bad.push(`${f.name}: подходят только DOCX и PDF`);
+      else if (f.size === 0) bad.push(`${f.name}: файл пустой`);
+      else if (f.size > MAX_FILE_SIZE) bad.push(`${f.name}: больше 50 МБ`);
+      else if (seen.has(id)) bad.push(`${f.name}: уже добавлен`);
+      else {
+        seen.add(id);
+        next.push({
+          key: crypto.randomUUID(),
+          file: f,
+          text: "",
+          title: f.name.replace(/\.(docx|pdf)$/i, ""),
+          author: null,
+          studentId: "",
+          coauthors: [],
+        });
       }
     }
-    setBatchRunning(false);
-  }
-
-  function selectFile(f: File) {
-    if (!f.name.match(/\.(docx|pdf)$/i)) {
-      setError("Только .docx и .pdf файлы");
-      return;
+    if (items.length === 0 && next.length > 0 && draftLength === 0) {
+      if (next.length === 1) {
+        next[0].title = draft.title.trim() || next[0].title;
+        next[0].author = draft.author?.trim() ? draft.author : null;
+        next[0].studentId = draft.studentId;
+        next[0].coauthors = draft.coauthors;
+      }
+      setDraft(EMPTY_DRAFT);
     }
-    setFile(f);
-    setError("");
-    if (!title) setTitle(f.name.replace(/\.(docx|pdf)$/i, ""));
+    setItems((prev) => [...prev, ...next]);
+    setRejected(bad);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (inputMode === "file" && !file) { setError("Выберите файл"); return; }
-    if (inputMode === "text" && textContent.trim().length < 50) { setError("Текст слишком короткий (минимум 50 символов)"); return; }
-    if (requireStudent && !student.trim()) { setError("ФИО студента обязательно для заполнения"); return; }
-    if (requireGroup && !group.trim()) { setError("Группа/класс обязательны для заполнения"); return; }
+  function addText() {
+    setItems((prev) => [...prev, { ...draft, key: crypto.randomUUID() }]);
+    setDraft(EMPTY_DRAFT);
+  }
+
+  function removeItem(key: string) {
+    if (key === draft.key) setDraft(EMPTY_DRAFT);
+    else setItems((prev) => prev.filter((i) => i.key !== key));
+  }
+
+  function patchItem(key: string, patch: Partial<Item>) {
+    if (key === draft.key) setDraft((d) => ({ ...d, ...patch }));
+    else setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
+  }
+
+  function confirmAll() {
+    const names = new Map(rows.filter((r) => r.unconfirmed).map((r) => [r.item.key, r.author]));
+    setItems((prev) => prev.map((i) => (names.has(i.key) ? { ...i, author: names.get(i.key)! } : i)));
+  }
+
+  function patchJob(key: string, patch: Partial<Job>) {
+    setJobs((prev) => prev.map((j) => (j.key === key ? { ...j, ...patch } : j)));
+  }
+
+  async function upload(list: Job[]) {
     setUploading(true);
-    setError("");
-    if (DEMO) { setTimeout(() => router.push("/checks/demo-1"), 1200); return; }
-    try {
+    for (const job of list) {
+      patchJob(job.key, { state: "uploading", error: undefined });
       const form = new FormData();
-      if (inputMode === "file") {
-        form.append("file", file!);
-      } else {
-        form.append("text_content", textContent.trim());
-      }
-      if (title) form.append("work_title", title);
-      if (student) form.append("student_name", student);
-      if (studentId) form.append("student_id", studentId);
-      if (group) form.append("group_name", group);
-      if (webhookUrl) form.append("webhook_url", webhookUrl);
+      if (job.item.file) form.append("file", job.item.file);
+      else form.append("text_content", job.item.text);
+      form.append("work_title", job.label);
+      if (job.author) form.append("student_name", job.author);
+      const ids = [job.item.studentId, ...job.item.coauthors.map((c) => c.id)]
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .join(", ");
+      if (ids) form.append("student_id", ids);
+      if (groupName) form.append("group_name", groupName);
+      if (webhookUrl.trim()) form.append("webhook_url", webhookUrl.trim());
       form.append("save_to_repository", String(saveToRepo));
       form.append("exclude_quotes", String(excludeQuotes));
       form.append("exclude_bibliography", String(excludeBiblio));
-      const token = localStorage.getItem("access_token");
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/checks`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form }
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? "Ошибка загрузки");
+      form.append("min_match_words", String(minWords));
+      try {
+        const res = await apiFetch<{ id: string }>("/api/v1/checks", { method: "POST", body: form });
+        patchJob(job.key, { state: "processing", checkId: res.id });
+        setQuota((q) => (q ? { ...q, used: q.used + 1 } : q));
+      } catch (err) {
+        patchJob(job.key, {
+          state: "failed",
+          error: err instanceof Error ? err.message : "Не удалось загрузить",
+        });
       }
-      const check = await res.json();
-      router.push(`/checks/${check.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка загрузки");
-      setUploading(false);
     }
+    setUploading(false);
   }
 
-  if (uploading) {
+  function start() {
+    if (blocker) return;
+    const list: Job[] = rows.map((r) => ({
+      key: r.item.key,
+      label: r.item.title.trim() || r.item.file?.name || "Вставленный текст",
+      item: r.item,
+      author: [r.author, ...r.item.coauthors.map((c) => c.name.trim())].filter(Boolean).join(", "),
+      state: "waiting",
+    }));
+    setJobs(list);
+    upload(list);
+  }
+
+  function reset() {
+    setJobs([]);
+    setItems([]);
+    setDraft(EMPTY_DRAFT);
+    setRejected([]);
+    setGroup(null);
+    setShowReady(false);
+  }
+
+  const processing = jobs.some((j) => j.state === "processing");
+  const router = useRouter();
+
+  // Одна работа → после завершения сразу открываем её отчёт.
+  // Две и более → остаёмся на списке, отчёт открывается по кнопке «Отчёт».
+  useEffect(() => {
+    if (jobs.length !== 1) return;
+    const j = jobs[0];
+    if (j.state === "done" && j.checkId) router.replace(`/checks/${j.checkId}`);
+  }, [jobs, router]);
+
+  useEffect(() => {
+    if (!processing) return;
+    const timer = setInterval(async () => {
+      try {
+        const list = await apiFetch<CheckRow[]>("/api/v1/checks");
+        const byId = new Map(list.map((c) => [c.id, c]));
+        setJobs((prev) =>
+          prev.map((j) => {
+            const c = j.checkId ? byId.get(j.checkId) : undefined;
+            if (j.state !== "processing" || !c) return j;
+            if (c.status === "done")
+              return { ...j, state: "done", similarity: c.similarity_percent, flags: c.flag_count };
+            if (c.status === "failed") return { ...j, state: "failed", error: "Не удалось обработать файл" };
+            return j;
+          })
+        );
+      } catch {
+        // следующая попытка через интервал
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [processing]);
+
+  useEffect(() => {
+    if (!uploading) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [uploading]);
+
+  // ── Очередь ────────────────────────────────────────────────────────────────
+  if (jobs.length > 0) {
+    const done = jobs.filter((j) => j.state === "done");
+    const failed = jobs.filter((j) => j.state === "failed");
+    const finished = done.length + failed.length;
+    const rank = (j: Job) =>
+      j.state === "failed" ? 1e6 : j.state === "done" ? (j.flags ?? 0) * 1000 + (j.similarity ?? 0) : -1;
+    const sorted = [...jobs].sort((a, b) => rank(b) - rank(a));
+    const retry = failed.filter((j) => !j.checkId);
+
     return (
-      <div className="p-8 max-w-lg">
-        <h1 className="text-xl font-semibold mb-6">Новая проверка</h1>
-        <div className="bg-white border rounded-xl p-6">
-          <p className="font-medium text-sm mb-4 flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            Идёт проверка · {file?.name}
-          </p>
-          <div className="space-y-2.5 text-sm">
-            <div className="flex items-center gap-2 text-green-600">
-              <span>✓</span><span>Извлекаем текст и нормализуем</span>
-            </div>
-            <div className="flex items-center gap-2 text-green-600">
-              <span>✓</span><span>Flagged: ищем подмену символов</span>
-            </div>
-            <div className="flex items-center gap-2 text-blue-600">
-              <span className="animate-spin inline-block">◌</span>
-              <span>Ищем совпадения в базе</span>
-            </div>
-          </div>
-          <p className="text-xs text-gray-400 mt-5">
-            Обычно 30–90 секунд. Можно закрыть страницу — отчёт появится в истории.
-          </p>
+      <>
+      <PageHeader title={finished === jobs.length ? "Проверка завершена" : "Идёт проверка"} />
+      <div className="p-4 md:p-8 max-w-4xl mx-auto">
+        <p className="text-sm text-gray-600 mt-1" role="status">
+          {uploading
+            ? "Файлы загружаются. Не закрывайте вкладку до конца загрузки."
+            : processing
+            ? "Все файлы загружены. Можно уйти: отчёты появятся в истории."
+            : `Готово: ${done.length}. С ошибкой: ${failed.length}.`}
+        </p>
+        {DEMO && <p className="text-sm text-gray-600 mt-1">Демо-режим: файлы не отправляются, результаты примерные.</p>}
+
+        <div className="mt-5 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-600 transition-all"
+            style={{ width: `${(finished / jobs.length) * 100}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-1.5">
+          {finished} из {jobs.length}
+        </p>
+
+        <ul className="mt-4 bg-white border rounded-xl divide-y">
+          {sorted.map((j) => (
+            <li key={j.key} className="px-4 py-3 flex items-center gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{j.author || "Автор не указан"}</p>
+                <p className="text-xs text-gray-500 truncate">{j.label}</p>
+                {j.error && <p className="text-xs text-red-700 mt-0.5">{j.error}</p>}
+              </div>
+              {j.state === "waiting" && <span className="text-xs text-gray-500">В очереди</span>}
+              {j.state === "uploading" && <span className="text-xs text-blue-700">Загружается</span>}
+              {j.state === "processing" && <span className="text-xs text-blue-700">Проверяется</span>}
+              {j.state === "failed" && <span className="text-xs text-red-700">Ошибка</span>}
+              {j.state === "done" && (
+                <>
+                  {j.similarity != null && <Ring value={j.similarity} />}
+                  <span className="text-xs text-gray-600 tabular">
+                    Совпадения {j.similarity != null ? `${Math.round(j.similarity)}%` : "нет данных"}
+                    {(j.flags ?? 0) > 0 && (
+                      <span className="block text-orange-700">Попытки обхода: {j.flags}</span>
+                    )}
+                  </span>
+                  <Link
+                    href={`/checks/${j.checkId}`}
+                    className="text-sm text-blue-700 font-medium hover:underline shrink-0"
+                  >
+                    Отчёт
+                  </Link>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          {!uploading && retry.length > 0 && (
+            <button
+              type="button"
+              onClick={() => upload(retry)}
+              className="btn btn-primary"
+            >
+              Повторить загрузку ({retry.length})
+            </button>
+          )}
+          {!uploading && (
+            <button
+              type="button"
+              onClick={reset}
+              className="btn btn-secondary"
+            >
+              Проверить другие работы
+            </button>
+          )}
+          <Link href="/checks" className="btn text-gray-700 hover:bg-gray-100">
+            История проверок
+          </Link>
         </div>
       </div>
+      </>
     );
   }
 
-  return (
-    <div className="p-8 max-w-2xl">
-      <h1 className="text-xl font-semibold mb-6">Новая проверка</h1>
+  // ── Подготовка ─────────────────────────────────────────────────────────────
+  const visibleReady = showReady || ready.length <= COLLAPSE_AFTER ? ready : [];
 
-      {/* Режим: одиночная / групповая */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-5">
+  const renderRow = (r: (typeof rows)[number]) => (
+    <li key={r.item.key} className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1 basis-48">
+          <p className="text-sm font-medium truncate" title={r.item.file?.name}>
+            {r.item.file?.name ?? (r.item.title.trim() || "Вставленный текст")}
+          </p>
+          <p className={`text-xs mt-0.5 ${r.problem ? "text-orange-700" : "text-gray-500"}`}>
+            {r.missing
+              ? "Укажите автора"
+              : r.unconfirmed
+              ? "Автор определён по имени файла, проверьте"
+              : r.author
+              ? r.item.author === null
+                ? "Студент найден в группе"
+                : "Автор указан"
+              : "Без автора: сравнить стиль с прошлыми работами не получится"}
+          </p>
+        </div>
+        <input
+          className={`${inputCls} flex-1 basis-44 ${r.problem ? "!border-orange-400" : ""}`}
+          value={r.item.author ?? r.match.name}
+          onChange={(e) => patchItem(r.item.key, { author: e.target.value })}
+          placeholder="ФИО автора"
+          aria-label={`Автор: ${r.item.title}`}
+          list="students"
+        />
+        {r.unconfirmed && (
+          <button
+            type="button"
+            onClick={() => patchItem(r.item.key, { author: r.author })}
+            className="text-sm text-blue-700 font-medium hover:underline"
+          >
+            Верно
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setCheckMode("single")}
-          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            checkMode === "single" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
+          onClick={() => removeItem(r.item.key)}
+          className="text-sm text-gray-500 hover:text-red-700"
+          aria-label={`Убрать: ${r.item.title}`}
         >
-          Одиночная
-        </button>
-        <button
-          type="button"
-          onClick={() => setCheckMode("group")}
-          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            checkMode === "group" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Групповая
+          Убрать
         </button>
       </div>
-
-      {checkMode === "single" && (
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Input mode tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-          <button
-            type="button"
-            onClick={() => setInputMode("file")}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              inputMode === "file" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Файл
-          </button>
-          <button
-            type="button"
-            onClick={() => setInputMode("text")}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              inputMode === "text" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Вставить текст
-          </button>
+      <details className="mt-1.5">
+        <summary className="text-xs text-gray-500 cursor-pointer w-fit hover:text-gray-800">
+          Название и ID студента
+        </summary>
+        <div className="grid sm:grid-cols-2 gap-3 mt-2">
+          <input
+            className={inputCls}
+            value={r.item.title}
+            onChange={(e) => patchItem(r.item.key, { title: e.target.value })}
+            placeholder="Название работы"
+            aria-label="Название работы"
+          />
+          <input
+            className={inputCls}
+            value={r.item.studentId}
+            onChange={(e) => patchItem(r.item.key, { studentId: e.target.value })}
+            placeholder="ID студента, если есть"
+            aria-label="ID студента"
+          />
         </div>
+      </details>
+    </li>
+  );
 
-        {/* File upload */}
-        {inputMode === "file" && <div
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+  return (
+    <>
+      <PageHeader title="Новая проверка" />
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:min-h-[calc(100vh-136px)]">
+      <div className="p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+      <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5 w-fit">
+        {[
+          { label: "Файл", value: false },
+          { label: "Вставить текст", value: true },
+        ].map((tab) => (
+          <button
+            key={tab.label}
+            type="button"
+            aria-pressed={textMode === tab.value}
+            onClick={() => setTextMode(tab.value)}
+            className={`px-3 h-7 rounded-md text-sm font-medium transition-colors ${
+              textMode === tab.value ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".docx,.pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) addFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      {!textMode && (
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            const f = e.dataTransfer.files[0];
-            if (f) selectFile(f);
+            addFiles(e.dataTransfer.files);
           }}
-          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-            dragOver
-              ? "border-blue-400 bg-blue-50"
-              : file
-              ? "border-green-400 bg-green-50"
-              : "border-gray-200 hover:border-gray-300 bg-white"
-          }`}
+          className={`mt-4 border border-dashed rounded-xl text-center transition-colors ${
+            items.length > 0 ? "p-4" : "p-10"
+          } ${dragOver ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50"}`}
         >
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".docx,.pdf"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) selectFile(f);
-              e.target.value = "";
-            }}
-          />
-          {file ? (
-            <>
-              <div className="text-3xl mb-2">📄</div>
-              <p className="font-medium text-sm text-green-700">{file.name}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {(file.size / 1024).toFixed(0)} KB · нажмите чтобы изменить
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="text-3xl mb-2 text-gray-300">↑</div>
-              <p className="font-medium text-sm text-gray-700">
-                Перетащите файл или выберите на компьютере
-              </p>
-              <p className="text-xs text-gray-400 mt-1">DOCX, PDF · сканы распознаются (OCR)</p>
-            </>
+          {items.length === 0 && (
+            <p className="font-medium text-sm text-gray-800 mb-3 flex flex-col items-center gap-3">
+              <span className="w-9 h-9 rounded-lg bg-white border shadow-sm flex items-center justify-center text-gray-600">
+                <Icon name="upload" />
+              </span>
+              Перетащите сюда файлы работ
+            </p>
           )}
-        </div>}
-
-        {/* Text input */}
-        {inputMode === "text" && (
-          <div className="bg-white border rounded-xl overflow-hidden">
-            <textarea
-              rows={12}
-              className="w-full px-4 py-3 text-sm focus:outline-none resize-none font-mono"
-              placeholder="Вставьте текст работы сюда... (минимум 50 символов)"
-              value={textContent}
-              onChange={(e) => setTextContent(e.target.value)}
-            />
-            <div className="px-4 py-2 border-t bg-gray-50 flex justify-between text-xs text-gray-400">
-              <span>{textContent.length} символов</span>
-              <span>{textContent.trim().split(/\s+/).filter(Boolean).length} слов</span>
-            </div>
+          {singleRow?.item.file && (
+            <p className="text-sm mb-3 flex flex-wrap justify-center gap-x-3">
+              <span className="font-medium break-all">{singleRow.item.file.name}</span>
+              <button
+                type="button"
+                onClick={() => removeItem(singleRow.item.key)}
+                className="text-gray-600 hover:text-red-700"
+              >
+                Убрать
+              </button>
+            </p>
+          )}
+          <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-2">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className={`btn ${items.length > 0 ? "btn-secondary" : "btn-primary"}`}
+            >
+              {items.length > 0 ? "Добавить ещё файлы" : "Выбрать файлы"}
+            </button>
           </div>
-        )}
+          {items.length === 0 && (
+            <p className="text-xs text-gray-500 mt-3">
+              DOCX или PDF до 50 МБ. Сканы распознаются.
+            </p>
+          )}
+        </div>
+      )}
 
-        {/* Meta */}
-        <div className="bg-white border rounded-xl p-4 space-y-3">
+      {textMode && (
+        <div className="mt-4 bg-white border rounded-xl overflow-hidden">
+          <textarea
+            rows={10}
+            className="w-full px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 rounded-t-xl"
+            value={draft.text}
+            onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
+            placeholder="Вставьте текст работы (минимум 50 символов)"
+            aria-label="Текст работы"
+          />
+          <div className="px-4 py-2 border-t bg-gray-50 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-gray-600">
+            <span>
+              {draftLength.toLocaleString("ru")} символов, {draft.text.trim().split(/\s+/).filter(Boolean).length} слов
+            </span>
+            {draftReady && (
+              <button type="button" onClick={addText} className="text-blue-700 font-medium hover:underline">
+                Добавить ещё один текст
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {rejected.length > 0 && (
+        <div role="alert" className="mt-3 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg">
+          <p className="font-medium">Не добавлено: {rejected.length}</p>
+          <ul className="mt-1">
+            {rejected.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <datalist id="students">
+        {roster.map((s, i) => (
+          <option key={i} value={s.name} />
+        ))}
+      </datalist>
+      <datalist id="groups">
+        {groups.map((g) => (
+          <option key={g.id} value={g.name} />
+        ))}
+      </datalist>
+
+      <div className="mt-6 bg-white border rounded-xl">
+        <div className={`p-4 grid gap-3 ${single ? "sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}>
+          {single && (
+            <div>
+              <label htmlFor="title" className={labelCls}>Название работы</label>
+              <input
+                id="title"
+                className={inputCls}
+                value={single.title}
+                onChange={(e) => patchItem(single.key, { title: e.target.value })}
+                placeholder="Курсовая работа..."
+              />
+            </div>
+          )}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Название работы
+            <label htmlFor="group" className={labelCls}>
+              {single ? "Группа / класс" : "Группа / класс (для всех работ)"}
+              {requireGroup && <span className="text-red-600"> *</span>}
             </label>
             <input
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Курсовая работа..."
+              id="group"
+              className={inputCls}
+              value={group ?? suggestedGroup}
+              onChange={(e) => setGroup(e.target.value)}
+              placeholder="Группа А"
+              list="groups"
             />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Студент{requireStudent && <span className="text-red-500 ml-0.5">*</span>}
-              </label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={student}
-                onChange={(e) => setStudent(e.target.value)}
-                placeholder="ФИО"
-                required={requireStudent}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                ID студента
-              </label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                placeholder="например, 2024-0152"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Группа / класс{requireGroup && <span className="text-red-500 ml-0.5">*</span>}
-              </label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={group}
-                onChange={(e) => setGroup(e.target.value)}
-                placeholder="Группа А"
-                required={requireGroup}
-              />
-            </div>
           </div>
         </div>
+        {single && (
+          <div className="p-4 border-t">
+            <div className="grid grid-cols-[minmax(0,1fr)_112px_32px] sm:grid-cols-[minmax(0,1fr)_144px_32px] gap-x-3">
+              <label htmlFor="student" className={labelCls}>
+                {single.coauthors.length > 0 ? "Студенты" : "Студент"}
+                {requireStudent && <span className="text-red-600"> *</span>}
+              </label>
+              <label htmlFor="student-id" className={`${labelCls} col-span-2`}>ID студента</label>
+            </div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_112px_32px] sm:grid-cols-[minmax(0,1fr)_144px_32px] gap-x-3 items-center">
+                <input
+                  id="student"
+                  className={`${inputCls} ${singleRow?.problem ? "!border-orange-400" : ""}`}
+                  value={single.author ?? singleRow?.match.name ?? ""}
+                  onChange={(e) => patchItem(single.key, { author: e.target.value })}
+                  placeholder="ФИО"
+                  list="students"
+                />
+                <input
+                  id="student-id"
+                  className={inputCls}
+                  value={single.studentId}
+                  onChange={(e) => patchItem(single.key, { studentId: e.target.value })}
+                  placeholder="2024-0152"
+                />
+              </div>
+              {singleRow?.unconfirmed && (
+                <p className="text-xs text-orange-700">
+                  Определён по имени файла, проверьте.{" "}
+                  <button
+                    type="button"
+                    onClick={() => patchItem(single.key, { author: singleRow.author })}
+                    className="text-blue-700 font-medium hover:underline"
+                  >
+                    Верно
+                  </button>
+                </p>
+              )}
+              {single.coauthors.map((c, i) => (
+                <div
+                  key={c.key}
+                  className="grid grid-cols-[minmax(0,1fr)_112px_32px] sm:grid-cols-[minmax(0,1fr)_144px_32px] gap-x-3 items-center"
+                >
+                  <input
+                    className={inputCls}
+                    value={c.name}
+                    onChange={(e) =>
+                      patchItem(single.key, {
+                        coauthors: single.coauthors.map((x) => (x.key === c.key ? { ...x, name: e.target.value } : x)),
+                      })
+                    }
+                    placeholder="ФИО"
+                    aria-label={`Студент ${i + 2}`}
+                    list="students"
+                    autoFocus={!c.name && !c.id}
+                  />
+                  <input
+                    className={inputCls}
+                    value={c.id}
+                    onChange={(e) =>
+                      patchItem(single.key, {
+                        coauthors: single.coauthors.map((x) => (x.key === c.key ? { ...x, id: e.target.value } : x)),
+                      })
+                    }
+                    placeholder={i === 0 ? "2024-0153" : ""}
+                    aria-label={`ID студента ${i + 2}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      patchItem(single.key, { coauthors: single.coauthors.filter((x) => x.key !== c.key) })
+                    }
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-700 hover:bg-gray-100 transition-colors"
+                    aria-label={`Убрать студента ${i + 2}`}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                patchItem(single.key, {
+                  coauthors: [...single.coauthors, { key: crypto.randomUUID(), name: "", id: "" }],
+                })
+              }
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:text-blue-800"
+            >
+              <Icon name="plus" />
+              Добавить студента
+            </button>
+          </div>
+        )}
+      </div>
 
-        {/* Exclusions */}
-        <div className="bg-white border rounded-xl p-4 space-y-2.5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-            Исключения
-          </p>
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={excludeQuotes}
-              onChange={(e) => setExcludeQuotes(e.target.checked)}
-              className="accent-blue-600"
-            />
-            <span className="text-sm text-gray-700">Исключить цитаты в кавычках «» и ""</span>
-          </label>
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={excludeBiblio}
-              onChange={(e) => setExcludeBiblio(e.target.checked)}
-              className="accent-blue-600"
-            />
-            <span className="text-sm text-gray-700">Исключить список литературы</span>
-          </label>
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={saveToRepo}
-              onChange={(e) => setSaveToRepo(e.target.checked)}
-              className="accent-blue-600"
-            />
-            <span className="text-sm text-gray-700">
-              Сохранить работу в репозиторий школы для будущих сравнений
+      {!single && review.length > 0 && (
+        <section className="mt-6">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h2 className="text-base font-semibold">
+              {problems > 0
+                ? `Проверьте авторов: ${problems}`
+                : review.some((r) => !r.author)
+                ? `Без автора: ${review.filter((r) => !r.author).length}`
+                : `Авторы проверены: ${review.length}`}
+            </h2>
+            {unconfirmed > 1 && (
+              <button
+                type="button"
+                onClick={confirmAll}
+                className="text-sm text-blue-700 font-medium hover:underline"
+              >
+                Все верно
+              </button>
+            )}
+          </div>
+          <ul className="bg-white border rounded-xl divide-y">{review.map(renderRow)}</ul>
+        </section>
+      )}
+
+      {!single && ready.length > 0 && (
+        <section className="mt-6">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h2 className="text-base font-semibold">Готовы к проверке: {ready.length}</h2>
+            {ready.length > COLLAPSE_AFTER && (
+              <button
+                type="button"
+                onClick={() => setShowReady(!showReady)}
+                className="text-sm text-blue-700 font-medium hover:underline"
+              >
+                {showReady ? "Свернуть" : "Показать"}
+              </button>
+            )}
+          </div>
+          {visibleReady.length > 0 && (
+            <ul className="bg-white border rounded-xl divide-y">{visibleReady.map(renderRow)}</ul>
+          )}
+        </section>
+      )}
+
+      </div>
+      </div>
+      <aside className="p-4 md:px-8 lg:p-6 border-t lg:border-t-0 lg:border-l space-y-6">
+      <div className="space-y-3">
+        <p className="text-xs font-medium text-gray-500">
+          {single ? "Исключения" : "Исключения (для всех)"}
+        </p>
+        <label className="flex items-start gap-2.5 cursor-pointer text-sm text-gray-800 [&>input]:mt-0.5">
+          <input type="checkbox" checked={excludeQuotes} onChange={(e) => setExcludeQuotes(e.target.checked)} />
+          {'Исключить цитаты в кавычках «» и\u00a0""'}
+        </label>
+        <label className="flex items-start gap-2.5 cursor-pointer text-sm text-gray-800 [&>input]:mt-0.5">
+          <input type="checkbox" checked={excludeBiblio} onChange={(e) => setExcludeBiblio(e.target.checked)} />
+          Исключить список литературы
+        </label>
+        <label className="flex items-start gap-2.5 cursor-pointer text-sm text-gray-800 [&>input]:mt-0.5">
+          <input type="checkbox" checked={saveToRepo} onChange={(e) => setSaveToRepo(e.target.checked)} />
+          {single ? "Сохранить работу" : "Сохранить работы"} в репозиторий школы для будущих сравнений
+        </label>
+      </div>
+
+      <div className="border-t pt-4">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          aria-expanded={showAdvanced}
+          className="-mx-2 px-2 py-2 w-[calc(100%+16px)] text-left rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <span className="flex items-center justify-between text-xs font-medium text-gray-500">
+            Дополнительно
+            <Icon name="chevron" className={`transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+          </span>
+          {!showAdvanced && (
+            <span className="mt-2 block space-y-2 text-sm">
+              <span className="flex justify-between gap-4">
+                <span className="text-gray-600">Учитывать совпадения</span>
+                <span className="text-gray-900 whitespace-nowrap">
+                  от {minWords} {minWords % 10 === 1 && minWords !== 11 ? "слова" : "слов"}
+                </span>
+              </span>
+              <span className="flex justify-between gap-4">
+                <span className="text-gray-600">Webhook</span>
+                <span className={`min-w-0 truncate ${webhookUrl.trim() ? "text-gray-900" : "text-gray-500"}`}>
+                  {webhookUrl.trim().replace(/^https?:\/\//, "") || "Не задан"}
+                </span>
+              </span>
             </span>
-          </label>
-        </div>
-
-        {/* Advanced: webhook */}
-        <div className="bg-white border rounded-xl overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:bg-gray-50 transition-colors"
-          >
-            <span>Дополнительно</span>
-            <span>{showAdvanced ? "▲" : "▼"}</span>
-          </button>
-          {showAdvanced && (
-            <div className="px-4 pb-4 border-t">
-              <label className="block text-xs font-medium text-gray-500 mt-3 mb-1">
-                Webhook URL{" "}
-                <span className="font-normal text-gray-400">— POST уведомление после завершения</span>
-              </label>
+          )}
+        </button>
+        {showAdvanced && (
+          <div className="pt-2 space-y-4">
+            <div>
+              <label htmlFor="min-words" className={labelCls}>Минимальная длина совпадения (слов)</label>
               <input
+                id="min-words"
+                type="number"
+                min={1}
+                max={50}
+                value={minWords}
+                onChange={(e) => setMinWords(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                className={`${inputCls} !w-24`}
+              />
+            </div>
+            <div>
+              <label htmlFor="webhook" className={labelCls}>Webhook URL: POST-уведомление после завершения</label>
+              <input
+                id="webhook"
                 type="url"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={inputCls}
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
                 placeholder="https://your-server.com/webhook"
               />
-              <p className="text-xs text-gray-400 mt-1.5">
+              <p className="text-xs text-gray-500 mt-1.5">
                 Получите JSON с результатом на ваш сервер. Поле X-Antiplagiat-Event: check.completed.
               </p>
             </div>
-          )}
-        </div>
-
-        {quotaInfo && quotaInfo.quota_limit !== null && (
-          <div className={`text-sm px-3 py-2 rounded-lg border ${
-            quotaInfo.checks_this_month >= quotaInfo.quota_limit
-              ? "bg-red-50 border-red-200 text-red-700"
-              : quotaInfo.checks_this_month >= quotaInfo.quota_limit * 0.9
-              ? "bg-yellow-50 border-yellow-200 text-yellow-700"
-              : "bg-gray-50 border-gray-200 text-gray-500"
-          }`}>
-            Проверок в этом месяце: {quotaInfo.checks_this_month} / {quotaInfo.quota_limit.toLocaleString()}
-            {quotaInfo.checks_this_month >= quotaInfo.quota_limit && (
-              <span className="font-medium"> — лимит исчерпан</span>
-            )}
           </div>
         )}
+      </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-            {error}
+      {quota && (
+        <div className="border-t pt-5">
+          <div className="flex items-baseline justify-between text-sm tabular">
+            <span className="text-gray-600">Проверок в этом месяце</span>
+            <span className="font-medium">
+              {quota.used.toLocaleString("ru")} <span className="text-gray-500 font-normal">/ {quota.limit.toLocaleString("ru")}</span>
+            </span>
           </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={
-            (inputMode === "file" ? !file : textContent.trim().length < 50) ||
-            (quotaInfo !== null &&
-              quotaInfo.quota_limit !== null &&
-              quotaInfo.checks_this_month >= quotaInfo.quota_limit)
-          }
-          className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-medium text-sm hover:bg-blue-700 disabled:opacity-40 transition-colors"
-        >
-          Запустить проверку
-        </button>
-      </form>
-      )}
-
-      {checkMode === "group" && (
-        <div className="space-y-5">
-          <p className="text-sm text-gray-500">
-            Добавьте студентов, укажите имя и ID, прикрепите файл каждому — проверки запустятся разом.
-          </p>
-
-          {/* Общая группа / класс */}
-          <div className="bg-white border rounded-xl p-4">
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Группа / класс (для всех)
-            </label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={group}
-              onChange={(e) => setGroup(e.target.value)}
-              placeholder="Группа А"
+          <div className="mt-2 h-1 rounded-full bg-gray-200 overflow-hidden">
+            <div
+              className={`h-full rounded-full ${
+                remaining === 0 ? "bg-red-600" : quota.used >= quota.limit * 0.9 ? "bg-yellow-500" : "bg-blue-600"
+              }`}
+              style={{ width: `${Math.min(100, (quota.used / quota.limit) * 100)}%` }}
             />
           </div>
-
-          {/* Список студентов */}
-          <div className="bg-white border rounded-xl divide-y">
-            {rows.map((r, idx) => (
-              <div key={r.key} className="p-3 flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-400 w-5 shrink-0">{idx + 1}</span>
-                <input
-                  className="flex-1 min-w-[140px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={r.name}
-                  onChange={(e) => updateRow(r.key, { name: e.target.value })}
-                  placeholder="ФИО студента"
-                />
-                <input
-                  className="w-32 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={r.studentId}
-                  onChange={(e) => updateRow(r.key, { studentId: e.target.value })}
-                  placeholder="ID студента"
-                />
-                <label
-                  className={`text-xs px-3 py-2 rounded-lg border cursor-pointer whitespace-nowrap ${
-                    r.file ? "border-green-400 bg-green-50 text-green-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"
-                  }`}
-                >
-                  {r.file ? `📄 ${r.file.name.slice(0, 22)}` : "Прикрепить файл"}
-                  <input
-                    type="file"
-                    accept=".docx,.pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f && !f.name.match(/\.(docx|pdf)$/i)) {
-                        setError("Только .docx и .pdf файлы");
-                        return;
-                      }
-                      if (f) {
-                        updateRow(r.key, { file: f, name: r.name || f.name.replace(/\.(docx|pdf)$/i, "") });
-                        setError("");
-                      }
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => removeRow(r.key)}
-                  className="text-gray-300 hover:text-red-500 px-1 text-lg shrink-0"
-                  title="Удалить строку"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            <div className="p-3">
-              <button
-                type="button"
-                onClick={addRow}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-              >
-                + Добавить студента
-              </button>
-            </div>
-          </div>
-
-          {/* Исключения (общие) */}
-          <div className="bg-white border rounded-xl p-4 space-y-2.5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-              Исключения (для всех)
-            </p>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" checked={excludeQuotes} onChange={(e) => setExcludeQuotes(e.target.checked)} className="accent-blue-600" />
-              <span className="text-sm text-gray-700">Исключить цитаты в кавычках «» и ""</span>
-            </label>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" checked={excludeBiblio} onChange={(e) => setExcludeBiblio(e.target.checked)} className="accent-blue-600" />
-              <span className="text-sm text-gray-700">Исключить список литературы</span>
-            </label>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" checked={saveToRepo} onChange={(e) => setSaveToRepo(e.target.checked)} className="accent-blue-600" />
-              <span className="text-sm text-gray-700">Сохранить работы в репозиторий школы</span>
-            </label>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          {/* Результаты пакета */}
-          {batchResults.length > 0 && (
-            <div className="bg-white border rounded-xl divide-y">
-              {batchResults.map((b) => (
-                <div key={b.key} className="p-3 flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate">{b.name}</span>
-                  {b.status === "pending" && <span className="text-xs text-gray-400">в очереди…</span>}
-                  {b.status === "running" && <span className="text-xs text-blue-500">отправка…</span>}
-                  {b.status === "error" && <span className="text-xs text-red-500">{b.error}</span>}
-                  {b.status === "done" && b.checkId && (
-                    <a href={`/checks/${b.checkId}`} className="text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0">
-                      Открыть отчёт →
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={runBatch}
-            disabled={batchRunning || rows.filter((r) => r.file && r.name.trim()).length === 0}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-medium text-sm hover:bg-blue-700 disabled:opacity-40 transition-colors"
-          >
-            {batchRunning
-              ? "Запуск проверок…"
-              : `Запустить проверки (${rows.filter((r) => r.file && r.name.trim()).length})`}
-          </button>
+          {remaining === 0 && <p className="mt-2 text-xs text-red-700">Лимит исчерпан</p>}
         </div>
       )}
-    </div>
+      </aside>
+      </div>
+
+      <div className="sticky bottom-0 px-4 md:px-6 py-3 md:py-[15px] bg-white border-t flex flex-wrap items-center justify-between gap-3">
+        <p className={`text-sm ${blocker && all.length > 0 ? "text-orange-700" : "text-gray-600"}`} role="status">
+          {blocker ||
+            (remaining !== null
+              ? `После проверки останется ${(remaining - all.length).toLocaleString("ru")} в этом месяце`
+              : "Всё готово")}
+        </p>
+        <button
+          type="button"
+          onClick={start}
+          disabled={!!blocker}
+          className="btn btn-primary"
+        >
+          {all.length === 0 ? "Проверить" : `Проверить ${works(all.length)}`}
+        </button>
+      </div>
+    </>
   );
 }

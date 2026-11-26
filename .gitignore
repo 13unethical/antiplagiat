@@ -27,3 +27,14 @@ backend/ml/data/ai/*
 backend/ml/export/
 backend/ml/*.zip
 backend/app/ml_model/
+
+backend/ml/.env
+human_corpus/
+*.tar.gz
+backend/ml/.venv/
+backend/lti_private.pem
+backend/app/ml_model_v1_backup/
+backend/ml/data/ai_v2/
+backend/ml/data/v2/
+backend/ml/logs/
+frontend/tsconfig.tsbuildinfo

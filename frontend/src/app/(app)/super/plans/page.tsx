@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Icon, Notice, PageHeader } from "../../ui";
 
 interface OrgPlan {
   id: string;
@@ -23,17 +24,13 @@ const PLANS = [
   {
     id: "standard",
     name: "Standard",
-    color: "border-gray-200",
-    badge: "bg-gray-100 text-gray-600",
     price: "150 000 сум/мес",
-    features: ["До 10 учителей", "1 000 проверок в месяц", "Антиплагиат (шинглы)", "Flagged-защита"],
+    features: ["До 10 учителей", "1 000 проверок в месяц", "Антиплагиат (шинглы)", "Защита от обхода"],
     missing: ["ИИ-детектор", "Межъязыковой поиск", "Репозиторий", "API-доступ"],
   },
   {
     id: "pro",
     name: "Pro",
-    color: "border-blue-400",
-    badge: "bg-blue-100 text-blue-700",
     price: "350 000 сум/мес",
     features: ["До 30 учителей", "5 000 проверок в месяц", "Шинглы + семантика", "Репозиторий", "API"],
     missing: [],
@@ -41,8 +38,6 @@ const PLANS = [
   {
     id: "enterprise",
     name: "Enterprise",
-    color: "border-purple-400",
-    badge: "bg-purple-100 text-purple-700",
     price: "По договору",
     features: ["Без ограничений", "Все функции Pro", "On-premise", "SLA 99.9%"],
     missing: [],
@@ -100,38 +95,27 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">Тарифы и лимиты</h1>
-      </div>
+    <>
+      <PageHeader title="Тарифы и лимиты" />
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl mb-5">
-          {error}
-        </div>
-      )}
+      {error && <Notice kind="err">{error}</Notice>}
 
       {/* Plan cards */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid md:grid-cols-3 gap-px bg-gray-200 border-b">
         {PLANS.map((plan) => (
-          <div key={plan.id} className={`bg-white border-2 rounded-xl p-5 ${plan.color}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold">{plan.name}</h2>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${plan.badge}`}>
-                {plan.id}
-              </span>
-            </div>
-            <p className="text-lg font-bold text-gray-800 mb-4">{plan.price}</p>
+          <div key={plan.id} className="bg-white px-4 md:px-6 py-5">
+            <h2 className="text-sm font-medium text-gray-600">{plan.name}</h2>
+            <p className="mt-1 mb-4 text-xl font-semibold tracking-tight">{plan.price}</p>
             <ul className="space-y-1.5 text-sm text-gray-700">
               {plan.features.map((f) => (
-                <li key={f} className="flex items-start gap-1.5">
-                  <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                <li key={f} className="flex items-start gap-2">
+                  <Icon name="check" className="text-gray-700 mt-0.5" />
                   <span>{f}</span>
                 </li>
               ))}
               {plan.missing.map((f) => (
-                <li key={f} className="flex items-start gap-1.5 opacity-30">
-                  <span className="mt-0.5 shrink-0">—</span>
+                <li key={f} className="flex items-start gap-2 text-gray-400">
+                  <Icon name="close" className="mt-0.5" />
                   <span>{f}</span>
                 </li>
               ))}
@@ -141,34 +125,38 @@ export default function PlansPage() {
       </div>
 
       {/* Org plan assignments */}
-      <h2 className="font-semibold mb-4">Тарифы школ</h2>
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+      <h2 className="section-title">Тарифы школ</h2>
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Школа</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Тариф</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Учителей</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Проверок/мес</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Действует до</th>
-              <th className="px-4 py-3" />
+              <th>Школа</th>
+              <th>Тариф</th>
+              <th>Учителей</th>
+              <th>Проверок/мес</th>
+              <th>Действует до</th>
+              <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={6} className="table-empty">
                   Загрузка...
                 </td>
               </tr>
+            ) : orgs.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="table-empty">Школ пока нет</td>
+              </tr>
             ) : (
               orgs.map((org) => (
-                <tr key={org.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{org.name}</td>
-                  <td className="px-4 py-3">
+                <tr key={org.id}>
+                  <td className="font-medium text-gray-900">{org.name}</td>
+                  <td>
                     {editOrg === org.id && editState ? (
                       <select
-                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="field !w-auto"
                         value={editState.plan}
                         onChange={(e) => setEditState({ ...editState, plan: e.target.value })}
                       >
@@ -177,17 +165,17 @@ export default function PlansPage() {
                         <option value="enterprise">enterprise</option>
                       </select>
                     ) : (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                      <span className="text-gray-700">
                         {org.plan}
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="text-gray-700">
                     {editOrg === org.id && editState ? (
                       <input
                         type="number"
                         min={1}
-                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none"
+                        className="field !w-20"
                         value={editState.seats_limit}
                         onChange={(e) => setEditState({ ...editState, seats_limit: +e.target.value })}
                       />
@@ -195,46 +183,46 @@ export default function PlansPage() {
                       org.seats_limit
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="text-gray-700">
                     {editOrg === org.id && editState ? (
                       <input
                         type="number"
                         min={0}
-                        className="w-24 border rounded px-2 py-1 text-sm focus:outline-none"
+                        className="field !w-24"
                         value={editState.monthly_quota}
                         onChange={(e) => setEditState({ ...editState, monthly_quota: +e.target.value })}
                       />
                     ) : (
-                      org.monthly_quota.toLocaleString()
+                      org.monthly_quota.toLocaleString("ru")
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="text-gray-500 text-xs">
                     {editOrg === org.id && editState ? (
                       <input
                         type="date"
-                        className="border rounded px-2 py-1 text-sm focus:outline-none"
+                        className="field !w-auto"
                         value={editState.valid_until}
                         onChange={(e) => setEditState({ ...editState, valid_until: e.target.value })}
                       />
                     ) : org.valid_until ? (
                       new Date(org.valid_until).toLocaleDateString("ru")
                     ) : (
-                      <span className="text-gray-300">без ограничений</span>
+                      <span className="text-gray-500">Без ограничений</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     {editOrg === org.id ? (
                       <div className="flex gap-2">
                         <button
                           onClick={() => saveEdit(org.id)}
                           disabled={saving}
-                          className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-40"
+                          className="btn btn-primary"
                         >
                           {saving ? "..." : "Сохранить"}
                         </button>
                         <button
                           onClick={() => { setEditOrg(null); setEditState(null); }}
-                          className="text-xs text-gray-500 hover:underline"
+                          className="link-danger"
                         >
                           Отмена
                         </button>
@@ -242,7 +230,7 @@ export default function PlansPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(org)}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="link"
                       >
                         Изменить
                       </button>
@@ -254,6 +242,6 @@ export default function PlansPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }
