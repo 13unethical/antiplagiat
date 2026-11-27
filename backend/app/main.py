@@ -16,7 +16,7 @@ from app.services.lti_keys import get_jwks
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
-    title="Antiplagiat API",
+    title="Markly API",
     version="0.3.0",
     description="Plagiarism and AI detection service for Uzbek and Russian texts",
 )

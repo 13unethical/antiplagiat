@@ -549,7 +549,7 @@ def _render_html_report(check: Check, flags: list[FlagOut], matches: list[MatchO
   <div style="border-bottom:2px solid #2563eb;padding-bottom:14px;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
       <div>
-        <div style="font-size:18px;font-weight:700;color:#1d4ed8;">Антиплагиат</div>
+        <div style="font-size:18px;font-weight:700;color:#1d4ed8;">Markly</div>
         <div style="font-size:11px;color:#6b7280;margin-top:2px;">
           Проверка {check_id_short} &nbsp;·&nbsp; {created_str}
         </div>
@@ -598,11 +598,11 @@ def _render_html_report(check: Check, flags: list[FlagOut], matches: list[MatchO
       <div style="margin-top:3px;">
         Проверьте подлинность:
         <a href="{settings.FRONTEND_URL}/verify/{str(check.id)}" style="color:#2563eb;">
-          antiplagiat.uz/verify/{check_id_short}
+          markly.study/verify/{check_id_short}
         </a>
       </div>
     </div>
-    <span>Сгенерировано автоматически · antiplagiat.uz</span>
+    <span>Сгенерировано автоматически · markly.study</span>
   </div>
 </body>
 </html>"""
@@ -729,7 +729,7 @@ def _add_cover(doc, check: Check, kind_title: str) -> None:
     date_str = (check.completed_at or check.created_at).strftime("%d.%m.%Y %H:%M")
 
     head = doc.add_paragraph()
-    r = head.add_run("Антиплагиат")
+    r = head.add_run("Markly")
     r.bold = True
     r.font.size = Pt(11)
     r.font.color.rgb = RGBColor.from_string("2563EB")
@@ -739,7 +739,7 @@ def _add_cover(doc, check: Check, kind_title: str) -> None:
     doc.add_paragraph()
     doc.add_paragraph()
     doc.add_heading(check.work_title or check.filename or "Документ", 0)
-    _small(doc.add_paragraph("Антиплагиат · отчёт о проверке"), size=10)
+    _small(doc.add_paragraph("Markly · отчёт о проверке"), size=10)
 
     doc.add_paragraph()
     doc.add_heading("Детали документа", level=1)
@@ -1089,7 +1089,7 @@ def _pdf_download_name(check_id: uuid.UUID, kind: str) -> str:
         "ai": "ИИ",
         "flagged": "обход",
     }.get(kind, "отчёт")
-    return f"Антиплагиат-{kind_label}-{id_short}.pdf"
+    return f"Markly-{kind_label}-{id_short}.pdf"
 
 
 @router.get("/{check_id}/report")

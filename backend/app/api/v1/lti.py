@@ -55,7 +55,7 @@ async def canvas_developer_key_config():
     base = public_api_base()
     front = settings.FRONTEND_URL.rstrip("/")
     return {
-        "title": "Antiplagiat / Markin",
+        "title": "Markly",
         "description": "Plagiarism and AI detection for Uzbek and Russian",
         "oidc_initiation_url": f"{base}/api/v1/lti/oidc/login",
         "target_link_uri": f"{base}/api/v1/lti/launch",
@@ -77,7 +77,7 @@ async def canvas_developer_key_config():
                 "tool_id": "antiplagiat",
                 "platform": "canvas.instructure.com",
                 "settings": {
-                    "text": "Antiplagiat",
+                    "text": "Markly",
                     "icon_url": f"{front}/icon.png",
                     "placements": [
                         {
@@ -175,7 +175,7 @@ async def lti_launch(
         # Browser open of launch URL — show status page
         return HTMLResponse(
             "<html><body style='font-family:sans-serif;padding:2rem'>"
-            "<h1>Antiplagiat LTI</h1>"
+            "<h1>Markly LTI</h1>"
             "<p>Tool is registered. Launch happens via Canvas/Moodle POST.</p>"
             "</body></html>"
         )

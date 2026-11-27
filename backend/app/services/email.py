@@ -36,14 +36,14 @@ def _send_smtp(to_email: str, subject: str, html_body: str) -> None:
 async def send_invitation_email(to_email: str, role: str, invite_url: str) -> None:
     """Отправить приглашение на email (async). Не бросает исключение при ошибке."""
     role_label = "администратора школы" if role == "school_admin" else "учителя"
-    subject = "Приглашение в систему Антиплагиат"
+    subject = "Приглашение в систему Markly"
     html_body = f"""<!DOCTYPE html>
 <html lang="ru">
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:sans-serif;">
   <div style="max-width:480px;margin:40px auto;background:#fff;border:1px solid #e5e7eb;
               border-radius:12px;padding:32px;">
-    <h2 style="margin:0 0 8px;font-size:20px;color:#111827;">Приглашение в Антиплагиат</h2>
+    <h2 style="margin:0 0 8px;font-size:20px;color:#111827;">Приглашение в Markly</h2>
     <p style="color:#6b7280;margin:0 0 24px;font-size:14px;">
       Вы приглашены в систему в роли <strong style="color:#374151;">{role_label}</strong>.
     </p>

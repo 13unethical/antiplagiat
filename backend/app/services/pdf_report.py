@@ -1,4 +1,4 @@
-"""Markin-style PDF reports: cover + metrics on page 1, highlighted text after."""
+"""Markly-style PDF reports: cover + metrics on page 1, highlighted text after."""
 from __future__ import annotations
 
 import io
@@ -125,7 +125,7 @@ def _draw_markin_logo(canvas, x: float, y: float, size: float = 11, with_text: b
     if with_text:
         canvas.setFillColor(HexColor(INK))
         canvas.setFont("DejaVu", 9)
-        canvas.drawString(x + size + 4, y + 1.5, "Markin")
+        canvas.drawString(x + size + 4, y + 1.5, "Markly")
 
 
 def _page_section_title(kind: str, page: int) -> str:
@@ -138,8 +138,8 @@ def _page_section_title(kind: str, page: int) -> str:
     return "Match Overview"
 
 
-class _MarkinDocTemplate:
-    """Thin wrapper around BaseDocTemplate with Markin header/footer."""
+class _MarklyDocTemplate:
+    """Thin wrapper around BaseDocTemplate with Markly header/footer."""
 
     def __init__(self, buf, *, title: str, submission_id: str, kind: str):
         from reportlab.lib.pagesizes import A4
@@ -157,7 +157,7 @@ class _MarkinDocTemplate:
             topMargin=22 * mm,
             bottomMargin=20 * mm,
             title=title,
-            author="Markin",
+            author="Markly",
         )
         frame = Frame(
             self._doc.leftMargin,
@@ -591,7 +591,7 @@ def render_pdf_report(
     if len(title) > 72:
         title = title[:71] + "…"
     story.append(Paragraph(esc(title), st["title"]))
-    story.append(Paragraph("Markin", st["brand_sub"]))
+    story.append(Paragraph("Markly", st["brand_sub"]))
     story.append(HRFlowable(width="100%", thickness=0.4, color=HexColor(LINE), spaceBefore=1, spaceAfter=8))
     story.append(Paragraph("Document Details", st["section"]))
     story.append(_cover_table(check, full_text, st, esc))
@@ -636,7 +636,7 @@ def render_pdf_report(
                 story.append(Paragraph(mk, st["body_text"]))
 
     buf = io.BytesIO()
-    doc = _MarkinDocTemplate(buf, title=f"Markin — {kind_title}", submission_id=sid, kind=kind)
+    doc = _MarklyDocTemplate(buf, title=f"Markly — {kind_title}", submission_id=sid, kind=kind)
     doc.build(story)
     buf.seek(0)
     return buf.getvalue()

@@ -6,52 +6,61 @@ export const DEMO = process.env.NEXT_PUBLIC_DEMO === "1";
 
 export const demoUser: AuthUser = {
   id: "demo-teacher",
-  email: "demo@antiplagiat.uz",
+  email: "demo@markly.study",
   full_name: "Демо Учитель",
   role: "teacher",
   org_id: "demo-org",
   status: "active",
 };
 
-const fullText = `Малый и средний бизнес — основа экономики большинства стран. Чтобы оставаться на плаву, компаниям нужны не только деньги, но и точная информация о своём финансовом состоянии.
+// Текст с большими совпадениями + ИИ-маркеры + обходы (homoglyphs)
+const fullText = `Данная работа посвящена анализу внедрения МСФО для малых и средних предприятий в Узбекистане. Следует отметить, что система финансовой отчётности, которая применяется в стране, находится в стадии реформирования.
 
-Данная работа посвящена анализу внедрения МСФО для малых и средних предприятий в Узбекистане. Следует отметить, что система финансовой отчётности, которая применяется в стране, находится в стадии реформирования.
+Малый и средний бизнес является основой экономики большинства стран. Чтобы оставаться на плаву, компаниям нужны не только деньги, но и точная инфoрмация о своём финансовом состоянии. Международные стандарты финансовой отчётности для малых и средних предприятий были разработаны для того, чтобы упростить учёт и снизить издержки на подготовку отчётности. Эти стандарты убирают сложные требования, которые редко применяются в небольших компаниях, и делают отчётность более понятной для банков и инвесторов. Переход на международные стандарты требует подготовки кадров, времени и ресурсов. В развивающихся странах принятие новых правил не означает, что отдельные фирмы будут применять их правильно на практике.
 
-Таким образом, переход на международные стандарты требует подготовки кадров, времени и ресурсов. В рамках настоящего исследования рассматриваются институциональные барьеры, которые мешают внедрению стандарта на практике.
+В Узбекистане улучшение финансовой отчётности является приоритетом по мере модернизации экономики. Крупные и общественно значимые компании постепенно переходят на полные международные стандарты. Однако для малого и среднего бизнеса сохраняются национальные правила учёта. Основными барьерами внедрения выступают нехватка квалифицированных бухгалтеров, ограниченные бюджеты, устаревшие компьютерные системы и слабая методическая поддержка.
 
-«Стандарт упрощает учёт для небольших компаний и снижает издержки на подготовку отчётности», — отмечают исследователи. Это подтверждается опытом ряда развивающихся стран.`;
+Таким образом, переход на международные стандарты требует подготовки кадров, времени и ресурсов. В рамках настоящего исследования рассматриваются институциональные барьеры, которые мешают внедрению стандарта на практике. Кроме того, необходимо подчеркнуть, что кoмпании часто ведут учёт вручную.
+
+Искусственный интеллект постепенно меняет сферу образования. Системы на основе машинного обучения помогают преподавателям проверять работы, выявлять пробелы в знаниях и персонализировать обучение. В то же время широкое использование генеративных моделей ставит вопросы академической честности. Студенты могут применять инструменты для написания эссе, что усложняет оценку самостоятельности работы. Поэтому образовательным учреждениям необходимы прозрачные правила использования таких технологий и инструменты для проверки текстов на машинную генерацию.
+
+«Стандарт упрощает учёт для небольших компаний и снижает издержки на подготовку отчётности», — отмечают исследователи. Это подтверждается опытом ряда развивающихся стран.
+
+В заключение можно сказать, что на основании вышеизложенного актуальность данной темы не вызывает сомнений. Важно отметить, что в современном мире играет важную роль цифровая трансформация учёта.`;
 
 function at(sub: string): [number, number] {
   const i = fullText.indexOf(sub);
   return i < 0 ? [0, 0] : [i, i + sub.length];
 }
 
-const [m1s, m1e] = at("Малый и средний бизнес — основа экономики большинства стран.");
-const [m2s, m2e] = at("переход на международные стандарты требует подготовки кадров");
-const [m3s, m3e] = at("Стандарт упрощает учёт для небольших компаний");
+const [m1s, m1e] = at("Малый и средний бизнес является основой экономики большинства стран.");
+const [m2s, m2e] = at("В Узбекистане улучшение финансовой отчётности является приоритетом");
+const [m3s, m3e] = at("Искусственный интеллект постепенно меняет сферу образования.");
+const [m4s, m4e] = at("Стандарт упрощает учёт для небольших компаний");
+const [m5s, m5e] = at("переход на международные стандарты требует подготовки кадров");
 
 const sampleReport = {
   id: "demo-1",
-  filename: "IFRS_for_SMEs_Uzbekistan.docx",
-  work_title: "МСФО для малого бизнеса в Узбекистане",
-  student_name: "Иван Петров",
-  student_id: "2024-0152",
+  filename: "Kursovaya_MSFO_AI.docx",
+  work_title: "МСФО и ИИ в образовании: курсовая работа",
+  student_name: "Жасур Рахимов",
+  student_id: "2024-0881",
   group_name: "ФК-21",
-  file_size: 25190,
+  file_size: 48200,
   status: "done",
-  word_count: 3735,
+  word_count: 4120,
   language: "ru",
-  similarity_percent: 14,
-  similarity_sources_count: 3,
-  ai_percent: 78,
-  ai_model_version: "stub-v0",
+  similarity_percent: 92,
+  similarity_sources_count: 5,
+  ai_percent: 94,
+  ai_model_version: "heuristic-v1",
   mt_flag: true,
-  mt_percent: 11,
-  stylometry_score: 0.41,
+  mt_percent: 34,
+  stylometry_score: 0.72,
   excluded_sources: [] as string[],
-  created_at: new Date(Date.now() - 3600_000).toISOString(),
-  completed_at: new Date(Date.now() - 3540_000).toISOString(),
-  text_preview: fullText.slice(0, 200),
+  created_at: new Date(Date.now() - 1800_000).toISOString(),
+  completed_at: new Date(Date.now() - 1680_000).toISOString(),
+  text_preview: fullText.slice(0, 220),
   full_text: fullText,
   ocr_used: false,
   flags: [
@@ -59,59 +68,100 @@ const sampleReport = {
       id: "f1",
       type: "homoglyph",
       severity: "high",
-      count: 4,
-      details: { word_count: 4, examples: [{ word: "инфoрмация", position: 180 }, { word: "кoмпания", position: 420 }] },
+      count: 7,
+      details: {
+        word_count: 7,
+        examples: [
+          { word: "инфoрмация", position: fullText.indexOf("инфoрмация") },
+          { word: "кoмпании", position: fullText.indexOf("кoмпании") },
+        ],
+      },
     },
     {
       id: "f2",
+      type: "invisible_char",
+      severity: "high",
+      count: 12,
+      details: { count: 12, kinds: ["zero_width_space", "soft_hyphen"] },
+    },
+    {
+      id: "f3",
+      type: "spaced_text",
+      severity: "medium",
+      count: 3,
+      details: { spans: 3 },
+    },
+    {
+      id: "f4",
       type: "quote_abuse",
       severity: "medium",
       count: 1,
-      details: { quoted_percent: 28.0 },
+      details: { quoted_percent: 22.0 },
     },
   ],
   matches: [
     {
-      id: "m1", start_char: m1s, end_char: m1e, matched_text: fullText.slice(m1s, m1e),
-      source_title: "kwpublications.com", source_url: "https://kwpublications.com/ifrs-smes",
-      source_lang: "ru", match_kind: "exact", score: 0.62,
+      id: "m1", start_char: m1s, end_char: m1e,
+      matched_text: fullText.slice(m1s, m1e),
+      source_title: "МСФО для малого и среднего бизнеса: обзор",
+      source_url: "https://example.org/ifrs-sme-overview",
+      source_lang: "ru", match_kind: "exact", score: 0.94,
     },
     {
-      id: "m2", start_char: m2s, end_char: m2e, matched_text: fullText.slice(m2s, m2e),
-      source_title: "Cross-country determinants of IFRS for SMEs adoption", source_url: null,
-      source_lang: "ru", match_kind: "paraphrase", score: 0.33,
+      id: "m2", start_char: m2s, end_char: m2e + 180,
+      matched_text: fullText.slice(m2s, m2e + 180),
+      source_title: "Внедрение МСФО в Узбекистане",
+      source_url: "https://example.org/ifrs-uzbekistan",
+      source_lang: "ru", match_kind: "exact", score: 0.91,
     },
     {
-      id: "m3", start_char: m3s, end_char: m3e, matched_text: fullText.slice(m3s, m3e),
-      source_title: "viewpoint.pwc.com", source_url: "https://viewpoint.pwc.com/ifrs-sme",
-      source_lang: "ru", match_kind: "exact", score: 0.21,
+      id: "m3", start_char: m3s, end_char: m3e + 220,
+      matched_text: fullText.slice(m3s, m3e + 220),
+      source_title: "Искусственный интеллект в образовании",
+      source_url: "https://example.org/ai-education",
+      source_lang: "ru", match_kind: "exact", score: 0.88,
+    },
+    {
+      id: "m4", start_char: m4s, end_char: m4e,
+      matched_text: fullText.slice(m4s, m4e),
+      source_title: "viewpoint.pwc.com",
+      source_url: "https://viewpoint.pwc.com/ifrs-sme",
+      source_lang: "ru", match_kind: "exact", score: 0.71,
+    },
+    {
+      id: "m5", start_char: m5s, end_char: m5e,
+      matched_text: fullText.slice(m5s, m5e),
+      source_title: "Cross-country determinants of IFRS for SMEs adoption",
+      source_url: null,
+      source_lang: "ru", match_kind: "paraphrase", score: 0.62,
     },
   ],
   mt_segments: [
-    { id: "s1", start_char: m2s, end_char: m2e, probability: 0.74, mt_kind: "machine" },
+    { id: "s1", start_char: m5s, end_char: m5e, probability: 0.81, mt_kind: "machine" },
+    { id: "s2", start_char: m3s, end_char: m3e + 80, probability: 0.69, mt_kind: "machine" },
   ],
 };
 
 const sampleChecks = [
   {
-    id: "demo-1", filename: "IFRS_for_SMEs_Uzbekistan.docx", work_title: "МСФО для малого бизнеса",
-    student_name: "Иван Петров", student_id: "2024-0152", group_name: "ФК-21", status: "done",
-    word_count: 3735, language: "ru", similarity_percent: 14, similarity_sources_count: 3,
-    ai_percent: 78, flag_count: 2, file_size: 25190,
-    created_at: new Date(Date.now() - 3600_000).toISOString(), completed_at: new Date(Date.now() - 3540_000).toISOString(),
+    id: "demo-1", filename: "Kursovaya_MSFO_AI.docx", work_title: "МСФО и ИИ в образовании: курсовая работа",
+    student_name: "Жасур Рахимов", student_id: "2024-0881", group_name: "ФК-21", status: "done",
+    word_count: 4120, language: "ru", similarity_percent: 78, similarity_sources_count: 5,
+    ai_percent: 86, flag_count: 4, file_size: 48200,
+    created_at: new Date(Date.now() - 1800_000).toISOString(), completed_at: new Date(Date.now() - 1680_000).toISOString(),
   },
   {
     id: "demo-2", filename: "essay_ai_education.docx", work_title: "ИИ в образовании",
     student_name: "Мадина Каримова", student_id: "2024-0153", group_name: "ФК-21", status: "done",
-    word_count: 1920, language: "uz-Latn", similarity_percent: 6, similarity_sources_count: 1,
-    ai_percent: 91, flag_count: 1, file_size: 14200,
+    word_count: 1920, language: "uz-Latn", similarity_percent: 61, similarity_sources_count: 3,
+    ai_percent: 91, flag_count: 2, file_size: 14200,
     created_at: new Date(Date.now() - 86400_000).toISOString(), completed_at: new Date(Date.now() - 86300_000).toISOString(),
   },
   {
     id: "demo-3", filename: "coursework_final.pdf", work_title: "Курсовая работа",
     student_name: "Алишер Усмонов", student_id: "2024-0160", group_name: "ФК-22", status: "done",
-    word_count: 5120, language: "ru", similarity_percent: 31, similarity_sources_count: 7,
-    ai_percent: 22, flag_count: 0, file_size: 48900,
+    word_count: 5120, language: "ru", similarity_percent: 44, similarity_sources_count: 7,
+    ai_percent: 72, flag_count: 1, file_size: 48900,
     created_at: new Date(Date.now() - 2 * 86400_000).toISOString(), completed_at: new Date(Date.now() - 2 * 86400_000 + 60000).toISOString(),
   },
 ];
@@ -124,18 +174,17 @@ const orgSettings = {
   require_group: false,
   default_min_match_words: 8,
   report_footer: "",
-  name: "Демо-школа",
+  name: "Демо-школа Markly",
   seats_limit: 10,
   monthly_quota: 1000,
   plan: "standard",
 };
 
-// Демо-группы со студентами (как ждёт страница «Группы и классы»)
 const demoGroups = [
   {
     id: "g1", name: "ФК-21", created_at: new Date().toISOString(),
     students: [
-      { id: "s1", name: "Иван Петров", checks_count: 3 },
+      { id: "s1", name: "Жасур Рахимов", checks_count: 3 },
       { id: "s2", name: "Мадина Каримова", checks_count: 2 },
       { id: "s3", name: "Алишер Усмонов", checks_count: 1 },
     ],
@@ -186,29 +235,29 @@ const demoAudit = [
 ];
 
 const demoAdmin: Record<string, unknown> = {
-  "/api/v1/org/stats": { ...demoSeats, monthly_quota: 1000, checks_this_month: 12, flagged_this_month: 2 },
+  "/api/v1/org/stats": { ...demoSeats, monthly_quota: 1000, checks_this_month: 12, disputed_this_month: 2 },
   "/api/v1/org/teachers": demoTeachers,
   "/api/v1/org/teachers/stats": demoSeats,
   "/api/v1/org/teachers/checks-stats": { t1: 8, t2: 4 },
   "/api/v1/org/repository/stats": { total: 2 },
   "/api/v1/org/repository": [
-    { id: "r1", check_id: "demo-1", work_title: "МСФО для малого бизнеса", student_name: "Иван Петров", group_name: "ФК-21", word_count: 3735, language: "ru", similarity_percent: 14, created_at: ago(30), teacher_email: "n.karimova@school.uz" },
-    { id: "r2", check_id: "demo-3", work_title: "Курсовая работа", student_name: "Алишер Усмонов", group_name: "ФК-22", word_count: 5120, language: "ru", similarity_percent: 31, created_at: ago(50), teacher_email: "o.saidov@school.uz" },
+    { id: "r1", check_id: "demo-1", work_title: "МСФО и ИИ в образовании", student_name: "Жасур Рахимов", group_name: "ФК-21", word_count: 4120, language: "ru", similarity_percent: 78, created_at: ago(30), teacher_email: "n.karimova@school.uz" },
+    { id: "r2", check_id: "demo-3", work_title: "Курсовая работа", student_name: "Алишер Усмонов", group_name: "ФК-22", word_count: 5120, language: "ru", similarity_percent: 44, created_at: ago(50), teacher_email: "o.saidov@school.uz" },
   ],
   "/api/v1/org/api-key": demoKey,
-  "/api/v1/admin/stats": { orgs_total: 2, teachers_total: 4, admins_total: 1, checks_this_month: 12, flagged_this_month: 2, web_queries_this_month: 86, web_urls_fetched_this_month: 240, web_matches_this_month: 31 },
+  "/api/v1/admin/stats": { orgs_total: 2, teachers_total: 4, admins_total: 1, checks_this_month: 12, disputed_this_month: 2, web_queries_this_month: 86, web_urls_fetched_this_month: 240, web_matches_this_month: 31 },
   "/api/v1/admin/organizations": demoOrgs,
   "/api/v1/admin/users": [...demoTeachers, { id: "u2", email: "director@school.uz", full_name: "Дилшод Рахимов", role: "school_admin", org_id: "o1", status: "active" }],
-  "/api/v1/admin/flagged/stats": { flagged_this_month: 2, high_severity_this_month: 1, orgs_with_flagged: 1 },
+  "/api/v1/admin/flagged/stats": { flagged_this_month: 3, high_severity_this_month: 2, orgs_with_flagged: 1 },
   "/api/v1/admin/flagged": [
-    { id: "demo-1", work_title: "МСФО для малого бизнеса", student_name: "Иван Петров", org_name: "Школа № 14, Ташкент", teacher_email: "n.karimova@school.uz", flags: ["homoglyph", "invisible_char"], severity: "high", created_at: ago(30) },
+    { id: "demo-1", work_title: "МСФО и ИИ в образовании", student_name: "Жасур Рахимов", org_name: "Школа № 14, Ташкент", teacher_email: "n.karimova@school.uz", flags: ["homoglyph", "invisible_char", "spaced_text"], severity: "high", created_at: ago(30) },
     { id: "demo-2", work_title: "ИИ в образовании", student_name: "Мадина Каримова", org_name: "Школа № 14, Ташкент", teacher_email: "n.karimova@school.uz", flags: ["spaced_text"], severity: "medium", created_at: ago(40) },
   ],
   "/api/v1/admin/model-versions": [
-    { id: "m1", model_type: "ai_detector", version: "stub-v0", description: "Эвристика", is_active: true, metrics: {}, created_at: ago(2000) },
-    { id: "m2", model_type: "ai_detector", version: "v0.4-xlmr-large", description: "XLM-RoBERTa large", is_active: false, metrics: { fpr: 0.012, tpr_at_1pct: 0.83, f1: 0.88, dataset_size: 42000 }, created_at: ago(200) },
+    { id: "m1", model_type: "ai_detector", version: "heuristic-v1", description: "Эвристика (прод fallback)", is_active: true, metrics: {}, created_at: ago(2000) },
+    { id: "m2", model_type: "ai_detector", version: "xlm-r-onnx-v1", description: "XLM-RoBERTa ONNX", is_active: false, metrics: { f1: 0.88, train_size: 7818 }, created_at: ago(200) },
   ],
-  "/api/v1/admin/dataset/stats": { human_written: 18, ai_generated: 12, machine_translated: 4 },
+  "/api/v1/admin/dataset/stats": { human_written: 4056, ai_generated: 1856, machine_translated: 0 },
   "/api/v1/admin/api-log/stats": { requests_today: 3, errors_today: 2, limit_hits_today: 1, avg_response_ms: 184 },
   "/api/v1/admin/api-log": [
     { id: "l1", org_name: "Самаркандский лицей", key_prefix: "sk-demo", method: "POST", path: "/api/v1/checks", status_code: 201, response_ms: 412, created_at: ago(1) },
@@ -231,7 +280,6 @@ const demoAdmin: Record<string, unknown> = {
 
 const rndId = (p: string) => p + Math.random().toString(36).slice(2, 8);
 
-// Возвращает примерные данные по пути API. method — GET/POST/...; body — тело запроса (JSON-строка)
 export function demoData(path: string, method = "GET", body?: string): unknown {
   const p = path.split("?")[0];
   let payload: Record<string, unknown> = {};
@@ -265,7 +313,6 @@ export function demoData(path: string, method = "GET", body?: string): unknown {
       return { id: rndId("g-"), name: (payload.name as string) || "Новая группа", created_at: new Date().toISOString(), students: [] };
     return demoGroups;
   }
-  // добавить/удалить студента в группе (демо)
   if (/^\/api\/v1\/groups\/[^/]+\/students$/.test(p) && method === "POST")
     return { id: rndId("s-"), name: (payload.name as string) || "Новый студент", checks_count: 0 };
   if (/^\/api\/v1\/groups\/[^/]+\/students\/[^/]+$/.test(p) && method === "DELETE") return {};
@@ -273,7 +320,7 @@ export function demoData(path: string, method = "GET", body?: string): unknown {
   if (p === "/api/v1/checks" && method === "POST") {
     const n = sampleChecks.length;
     const created = {
-      ...sampleChecks[sampleChecks.length - 1 - (n % 3)], id: `demo-${n + 1}`,
+      ...sampleChecks[0], id: `demo-${n + 1}`,
       work_title: (payload.work_title as string) || "Без названия",
       student_name: (payload.student_name as string) || "", student_id: (payload.student_id as string) || "",
       group_name: (payload.group_name as string) || "", status: "processing",
@@ -292,7 +339,6 @@ export function demoData(path: string, method = "GET", body?: string): unknown {
     return { ...sampleReport, ...(id === "demo-1" ? {} : sampleChecks.find((c) => c.id === id)), id };
   }
 
-  // Безопасные значения по умолчанию, чтобы страницы не падали
   if (method === "GET") return [];
   return {};
 }
