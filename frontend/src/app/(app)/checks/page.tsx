@@ -172,7 +172,7 @@ export default function ChecksHistoryPage() {
       const kindLabel =
         kind === "ai" ? "ИИ" : kind === "flagged" ? "обход" : "совпадения";
       a.href = url;
-      a.download = `Антиплагиат-${kindLabel}-${checkId.slice(0, 8).toUpperCase()}.pdf`;
+      a.download = `Markly-${kindLabel}-${checkId.slice(0, 8).toUpperCase()}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {

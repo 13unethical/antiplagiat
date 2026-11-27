@@ -181,6 +181,13 @@ async def invite_school_admin(
     if not org_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Organization not found")
 
+    existing_user = await db.execute(select(User).where(User.email == data.email))
+    if existing_user.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail="Пользователь с этим email уже зарегистрирован — войдите под ним или используйте «Войти как»",
+        )
+
     # Нет активного приглашения для этого email в этой организации
     dup = await db.execute(
         select(Invitation).where(

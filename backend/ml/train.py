@@ -151,6 +151,8 @@ def main() -> None:
         metric_for_best_model="f1",
         logging_steps=50,
         report_to=[],
+        dataloader_pin_memory=False,  # MPS
+        save_total_limit=2,
     )
     trainer = Trainer(
         model=model,

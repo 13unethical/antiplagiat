@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = "noreply@antiplagiat.uz"
+    SMTP_FROM: str = "noreply@markly.study"
     # True = STARTTLS on port 587 (most providers); False = plain on port 25
     SMTP_TLS: bool = True
 

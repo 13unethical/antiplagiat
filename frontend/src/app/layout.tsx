@@ -5,8 +5,8 @@ import "./globals.css";
 const medeo = localFont({ src: "./fonts/MedeoSansVariable.woff2", weight: "100 900", variable: "--font-medeo", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Markin",
-  description: "Markin — проверка на плагиат и ИИ-детекцию",
+  title: "Markly",
+  description: "Markly — проверка на плагиат и ИИ-детекцию",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

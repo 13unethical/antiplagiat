@@ -162,7 +162,7 @@ def detect_ai(text: str, language: str = "unknown") -> AiDetectorResult:
         from app.services.ai_model import predict_ai_percent
         ml = predict_ai_percent(text)
         if ml is not None:
-            return AiDetectorResult(ai_percent=ml, model_version="distilbert-ml-onnx-v1")
+            return AiDetectorResult(ai_percent=ml, model_version="distilbert-ml-onnx-v2")
     except Exception:  # noqa: BLE001
         pass
     # 2. Эвристика heuristic-v1 (fallback).

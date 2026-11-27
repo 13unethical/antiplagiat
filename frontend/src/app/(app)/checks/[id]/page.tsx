@@ -313,7 +313,7 @@ export default function CheckDetailPage() {
       const kindLabel =
         kind === "ai" ? "ИИ" : kind === "flagged" ? "обход" : "совпадения";
       a.href = url;
-      a.download = `Антиплагиат-${kindLabel}-${check.id.slice(0, 8).toUpperCase()}.pdf`;
+      a.download = `Markly-${kindLabel}-${check.id.slice(0, 8).toUpperCase()}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -428,7 +428,7 @@ export default function CheckDetailPage() {
           </div>
         )}
 
-        {/* Экспорт — PDF в стиле Markin */}
+        {/* Экспорт — PDF в стиле Markly */}
         {check.status === "done" && (
           <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
             <div className="flex-1 flex flex-wrap items-center justify-between gap-2 border rounded-xl pl-4 pr-2 py-2">

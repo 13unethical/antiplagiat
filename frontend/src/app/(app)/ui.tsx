@@ -137,7 +137,7 @@ export function Logo({ className = "h-6" }: { className?: string }) {
           <path d="M3.5 8.2 6.4 11l6-7" />
         </svg>
       </span>
-      <span className="font-semibold tracking-tight text-gray-900 text-[1.05em] leading-none">Markin</span>
+      <span className="font-semibold tracking-tight text-gray-900 text-[1.05em] leading-none">Markly</span>
     </span>
   );
 }

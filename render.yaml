@@ -22,6 +22,8 @@ services:
         value: BAAI/bge-small-en-v1.5   # лёгкая модель, чтобы не упасть по памяти
       - key: WEB_SEARCH_ENABLED
         value: "false"     # без ключа Brave веб-поиск всё равно отключается
+      - key: API_PUBLIC_URL
+        value: https://api.markly.study
 
 databases:
   - name: antiplagiat-db

@@ -2,7 +2,7 @@
 
 Войти: https://www.spaceship.com/auth/  
 Launchpad → **Advanced DNS** → `markly.study`  
-Удалить parking/redirect на `@` и `www`.
+Удалить parking/redirect на `@` и `www` (сейчас A → 54.149.79.189 / 34.216.117.25).
 
 | Type | Host | Value |
 |------|------|-------|
@@ -19,4 +19,4 @@ Launchpad → **Advanced DNS** → `markly.study`
 - https://markly-indol.vercel.app
 - https://antiplagiat-backend.onrender.com/docs
 
-Логин после seed: `admin@antiplagiat.uz` / `changeme123`
+Логин: `admin@antiplagiat.uz` / `changeme123`

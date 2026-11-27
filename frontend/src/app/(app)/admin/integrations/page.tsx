@@ -251,7 +251,7 @@ export default function IntegrationsPage() {
                     <code className="text-xs bg-gray-50 px-1 rounded">integrations/moodle/</code>.
                   </li>
                   <li>
-                    Moodle → Плагины → Плагиатизм → Антиплагиат: API URL ={" "}
+                    Moodle → Плагины → Плагиатизм → Markly: API URL ={" "}
                     <code className="text-xs bg-gray-50 px-1 rounded break-all">{data.api_public_url}</code>,
                     ключ и секрет.
                   </li>
