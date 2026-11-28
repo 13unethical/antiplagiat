@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # Пусто -> используется эвристика heuristic-v1.
     AI_MODEL_DIR: str = ""
 
+    # DocMaxxing EN DeBERTa (POST {URL}/score). Для language=en.
+    DOCMAXXING_AI_ENABLED: bool = True
+    # DocMaxxing GCP :8081 — POST /score, GET /healthz (model auto_20261117_*, thr 0.35)
+    DOCMAXXING_AI_URL: str = ""
+    DOCMAXXING_AI_KEY: str = ""
+    # 0 = threshold из ответа сервера (prod 0.35); >0 = зафиксировать свой
+    DOCMAXXING_AI_THRESHOLD: float = 0.0
+
     # Stage 9: Live web search via Brave Search API
     BRAVE_API_KEY: str = ""
     WEB_SEARCH_ENABLED: bool = True

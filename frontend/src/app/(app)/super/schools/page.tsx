@@ -30,12 +30,14 @@ export default function SchoolsPage() {
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [inviteForm, setInviteForm] = useState<{ orgId: string; email: string } | null>(null);
+  const [inviteForm, setInviteForm] = useState<{ orgId: string; email: string; full_name: string } | null>(null);
   const [editForm, setEditForm] = useState<Organization | null>(null);
   const [newOrg, setNewOrg] = useState({ name: "", seats_limit: 10, monthly_quota: 1000 });
   const [msg, setMsg] = useState<MsgState>(null);
   const [loading, setLoading] = useState(true);
   const [expandedOrg, setExpandedOrg] = useState<string | null>(null);
+  const [creds, setCreds] = useState<{ email: string; password: string; role: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -122,20 +124,44 @@ export default function SchoolsPage() {
     e.preventDefault();
     if (!inviteForm) return;
     try {
-      const inv = await apiFetch<{ token: string }>("/api/v1/admin/invitations", {
-        method: "POST",
-        body: JSON.stringify({
-          email: inviteForm.email,
-          role: "school_admin",
-          org_id: inviteForm.orgId,
-        }),
-      });
-      setMsg({ text: `Приглашение создано. Токен: ${inv.token}`, kind: "ok" });
+      const created = await apiFetch<{ email: string; password: string; role: string }>(
+        `/api/v1/admin/organizations/${inviteForm.orgId}/admins`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email: inviteForm.email.trim(),
+            full_name: inviteForm.full_name.trim() || undefined,
+          }),
+        },
+      );
+      setCreds({ email: created.email, password: created.password, role: created.role });
+      setMsg({ text: "Админ создан. Скопируйте логин и пароль — пароль больше не покажется.", kind: "ok" });
       setInviteForm(null);
       fetchData();
     } catch (err) {
       setMsg({ text: err instanceof ApiError ? err.message : "Ошибка", kind: "err" });
     }
+  }
+
+  async function resetPassword(userId: string) {
+    if (!confirm("Выпустить новый пароль? Старый перестанет работать.")) return;
+    try {
+      const created = await apiFetch<{ email: string; password: string; role: string }>(
+        `/api/v1/admin/users/${userId}/reset-password`,
+        { method: "POST" },
+      );
+      setCreds({ email: created.email, password: created.password, role: created.role });
+      setMsg({ text: "Новый пароль выпущен. Скопируйте его сейчас.", kind: "ok" });
+    } catch (err) {
+      setMsg({ text: err instanceof ApiError ? err.message : "Ошибка", kind: "err" });
+    }
+  }
+
+  async function copyCreds() {
+    if (!creds) return;
+    await navigator.clipboard.writeText(`Логин: ${creds.email}\nПароль: ${creds.password}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -240,10 +266,16 @@ export default function SchoolsPage() {
         </form>
       )}
 
-      {/* Invite admin form */}
       {inviteForm && (
-        <form onSubmit={sendInvite} className="form-block">
-          <h2 className="font-semibold text-base">Пригласить администратора школы</h2>
+        <form onSubmit={sendInvite} className="form-block space-y-3">
+          <h2 className="font-semibold text-base">Создать администратора школы</h2>
+          <p className="text-xs text-gray-500">Сразу выдадим логин (email) и пароль — передайте их админу.</p>
+          <input
+            value={inviteForm.full_name}
+            onChange={(e) => setInviteForm({ ...inviteForm, full_name: e.target.value })}
+            placeholder="Имя"
+            className="field"
+          />
           <input
             type="email" required
             value={inviteForm.email}
@@ -252,14 +284,31 @@ export default function SchoolsPage() {
             className="field"
           />
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">Отправить</button>
+            <button type="submit" className="btn btn-primary">Создать</button>
             <button type="button" onClick={() => setInviteForm(null)} className="btn btn-secondary">Отмена</button>
           </div>
         </form>
       )}
 
-      {/* Message */}
       {msg && <Notice kind={msg.kind} onClose={() => setMsg(null)}>{msg.text}</Notice>}
+
+      {creds && (
+        <div className="mx-4 md:mx-6 my-4 p-4 border rounded-xl bg-gray-50 space-y-2">
+          <p className="text-sm font-medium text-gray-900">
+            Данные для входа ({creds.role === "teacher" ? "учитель" : "админ школы"})
+          </p>
+          <div className="text-sm font-mono break-all">
+            <div>Логин: {creds.email}</div>
+            <div>Пароль: {creds.password}</div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={copyCreds} className="btn btn-secondary">
+              {copied ? "Скопировано" : "Копировать"}
+            </button>
+            <button type="button" onClick={() => setCreds(null)} className="btn btn-secondary">Закрыть</button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto">
@@ -295,14 +344,10 @@ export default function SchoolsPage() {
                       <td className="font-medium text-gray-900">{org.name}</td>
                       <td className="text-xs text-gray-500">
                         {admin ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span>{admin.email}</span>
-                            <button
-                              onClick={() => handleImpersonate(admin)}
-                              className="link"
-                            >
-                              Войти
-                            </button>
+                            <button onClick={() => handleImpersonate(admin)} className="link">Войти</button>
+                            <button onClick={() => resetPassword(admin.id)} className="link">Пароль</button>
                           </div>
                         ) : (
                           <span className="text-gray-500">Не назначен</span>
@@ -337,10 +382,10 @@ export default function SchoolsPage() {
                             Лимиты
                           </button>
                           <button
-                            onClick={() => setInviteForm({ orgId: org.id, email: "" })}
+                            onClick={() => setInviteForm({ orgId: org.id, email: "", full_name: "" })}
                             className="link"
                           >
-                            {admin ? "Сменить админа" : "Пригласить админа"}
+                            {admin ? "Ещё админ" : "Создать админа"}
                           </button>
                         </div>
                       </td>
@@ -361,12 +406,14 @@ export default function SchoolsPage() {
                                     {t.status === "active" ? "Активен" : t.status === "pending" ? "Приглашён" : "Отключён"}
                                   </Status>
                                   {t.status === "active" && (
-                                    <button
-                                      onClick={() => handleImpersonate(t)}
-                                      className="link"
-                                    >
-                                      Войти как учитель
-                                    </button>
+                                    <>
+                                      <button onClick={() => handleImpersonate(t)} className="link">
+                                        Войти как учитель
+                                      </button>
+                                      <button onClick={() => resetPassword(t.id)} className="link">
+                                        Пароль
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               ))}

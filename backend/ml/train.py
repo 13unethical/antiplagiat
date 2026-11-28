@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 
-LANGS = ("ru", "uz-Latn", "uz-Cyrl")
+LANGS = ("ru", "uz-Latn")
 
 
 def load_jsonl(p: Path) -> list[dict]:

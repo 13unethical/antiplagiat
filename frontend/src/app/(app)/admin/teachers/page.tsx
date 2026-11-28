@@ -34,6 +34,9 @@ export default function TeachersPage() {
   const [checksStats, setChecksStats] = useState<Record<string, number>>({});
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [creds, setCreds] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [editQuotaId, setEditQuotaId] = useState<string | null>(null);
   const [quotaInput, setQuotaInput] = useState("");
   const [msg, setMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
@@ -58,15 +61,17 @@ export default function TeachersPage() {
   async function invite(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const inv = await apiFetch<{ token: string }>("/api/v1/org/invitations", {
+      const created = await apiFetch<{ email: string; password: string }>("/api/v1/org/teachers", {
         method: "POST",
-        body: JSON.stringify({ email: inviteEmail, role: "teacher" }),
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          full_name: inviteName.trim() || undefined,
+        }),
       });
-      setMsg({
-        text: `Приглашение создано. Токен: ${inv.token}`,
-        kind: "ok",
-      });
+      setCreds({ email: created.email, password: created.password });
+      setMsg({ text: "Учитель создан. Скопируйте логин и пароль — пароль больше не покажется.", kind: "ok" });
       setInviteEmail("");
+      setInviteName("");
       setShowInvite(false);
       fetchData();
     } catch (err) {
@@ -75,6 +80,27 @@ export default function TeachersPage() {
         kind: "err",
       });
     }
+  }
+
+  async function resetPassword(t: Teacher) {
+    if (!confirm(`Выпустить новый пароль для ${t.email}? Старый перестанет работать.`)) return;
+    try {
+      const created = await apiFetch<{ email: string; password: string }>(
+        `/api/v1/org/teachers/${t.id}/reset-password`,
+        { method: "POST" },
+      );
+      setCreds({ email: created.email, password: created.password });
+      setMsg({ text: "Новый пароль выпущен. Скопируйте его сейчас.", kind: "ok" });
+    } catch (err) {
+      setMsg({ text: err instanceof ApiError ? err.message : "Ошибка", kind: "err" });
+    }
+  }
+
+  async function copyCreds() {
+    if (!creds) return;
+    await navigator.clipboard.writeText(`Логин: ${creds.email}\nПароль: ${creds.password}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   async function saveQuota(teacher: Teacher) {
@@ -121,20 +147,26 @@ export default function TeachersPage() {
         )}
         <button onClick={() => setShowInvite(!showInvite)} disabled={!canInvite} className="btn btn-primary">
           <Icon name="plus" />
-          Пригласить учителя
+          Добавить учителя
         </button>
       </PageHeader>
 
-      {/* Invite form */}
       {showInvite && (
         <form
           onSubmit={invite}
           className="px-4 md:px-6 py-4 border-b bg-gray-50 flex flex-wrap gap-3 items-end"
         >
+          <div className="flex-1 min-w-[180px] max-w-xs">
+            <label className="field-label">Имя</label>
+            <input
+              value={inviteName}
+              onChange={(e) => setInviteName(e.target.value)}
+              placeholder="Иван Иванов"
+              className="field"
+            />
+          </div>
           <div className="flex-1 min-w-[220px] max-w-sm">
-            <label className="field-label">
-              Email учителя
-            </label>
+            <label className="field-label">Email (логин)</label>
             <input
               type="email"
               required
@@ -145,25 +177,29 @@ export default function TeachersPage() {
             />
           </div>
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className="btn btn-primary"
-            >
-              Отправить
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowInvite(false)}
-              className="btn btn-secondary"
-            >
-              Отмена
-            </button>
+            <button type="submit" className="btn btn-primary">Создать</button>
+            <button type="button" onClick={() => setShowInvite(false)} className="btn btn-secondary">Отмена</button>
           </div>
         </form>
       )}
 
-      {/* Message */}
       {msg && <Notice kind={msg.kind} onClose={() => setMsg(null)}>{msg.text}</Notice>}
+
+      {creds && (
+        <div className="mx-4 md:mx-6 my-4 p-4 border rounded-xl bg-gray-50 space-y-2">
+          <p className="text-sm font-medium text-gray-900">Данные для входа (скопируйте сейчас)</p>
+          <div className="text-sm font-mono break-all">
+            <div>Логин: {creds.email}</div>
+            <div>Пароль: {creds.password}</div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={copyCreds} className="btn btn-secondary">
+              {copied ? "Скопировано" : "Копировать"}
+            </button>
+            <button type="button" onClick={() => setCreds(null)} className="btn btn-secondary">Закрыть</button>
+          </div>
+        </div>
+      )}
 
       {/* Teachers table */}
       <div className="overflow-x-auto">
@@ -192,7 +228,7 @@ export default function TeachersPage() {
             ) : teachers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="table-empty">
-                  Нет учителей. Нажмите «Пригласить учителя».
+                  Нет учителей. Нажмите «Добавить учителя».
                 </td>
               </tr>
             ) : (
@@ -231,13 +267,18 @@ export default function TeachersPage() {
                   <td>
                     <Status tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status] ?? t.status}</Status>
                   </td>
-                  <td>
+                  <td className="space-x-3 whitespace-nowrap">
                     {t.status !== "pending" && (
                       <button
                         onClick={() => toggleStatus(t)}
                         className={t.status === "active" ? "link-danger" : "link"}
                       >
                         {t.status === "active" ? "Отключить" : "Включить"}
+                      </button>
+                    )}
+                    {t.status === "active" && (
+                      <button onClick={() => resetPassword(t)} className="link">
+                        Новый пароль
                       </button>
                     )}
                   </td>

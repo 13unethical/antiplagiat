@@ -78,6 +78,8 @@ export default function NewCheckPage() {
   const [excludeBiblio, setExcludeBiblio] = useState(true);
   const [minWords, setMinWords] = useState(8);
   const [saveToRepo, setSaveToRepo] = useState(false);
+  /** auto | ru | uz | en — авто по умолчанию, ручной выбор при ошибке детекта */
+  const [language, setLanguage] = useState<"auto" | "ru" | "uz" | "en">("auto");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [requireStudent, setRequireStudent] = useState(false);
@@ -264,6 +266,7 @@ export default function NewCheckPage() {
       form.append("exclude_quotes", String(excludeQuotes));
       form.append("exclude_bibliography", String(excludeBiblio));
       form.append("min_match_words", String(minWords));
+      form.append("language", language);
       try {
         const res = await apiFetch<{ id: string }>("/api/v1/checks", { method: "POST", body: form });
         patchJob(job.key, { state: "processing", checkId: res.id });
@@ -814,7 +817,42 @@ export default function NewCheckPage() {
       </div>
       </div>
       <aside className="p-4 md:px-8 lg:p-6 border-t lg:border-t-0 lg:border-l space-y-6">
-      <div className="space-y-3">
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-gray-500">Язык работы</p>
+        <div className="flex flex-wrap gap-0.5 bg-gray-100 rounded-lg p-0.5" role="group" aria-label="Язык работы">
+          {(
+            [
+              { value: "auto", label: "Авто" },
+              { value: "ru", label: "RU" },
+              { value: "uz", label: "UZ" },
+              { value: "en", label: "EN" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              aria-pressed={language === opt.value}
+              onClick={() => setLanguage(opt.value)}
+              className={`flex-1 min-w-[3.25rem] px-2 h-8 rounded-md text-sm font-medium transition-colors ${
+                language === opt.value
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500">
+          {language === "auto"
+            ? "Определим по тексту. Для EN включится детектор DocMaxxing."
+            : language === "en"
+            ? "ИИ-детектор: DocMaxxing (английский)."
+            : "Ручной выбор, если авто определило неверно."}
+        </p>
+      </div>
+
+      <div className="space-y-3 border-t pt-5">
         <p className="text-xs font-medium text-gray-500">
           {single ? "Исключения" : "Исключения (для всех)"}
         </p>

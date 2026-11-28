@@ -57,12 +57,22 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 @dataclass
+class WebPageHit:
+    url: str
+    title: str
+    text: str
+    language: str
+
+
+@dataclass
 class WebSearchResult:
     """Summary returned by run_web_search to processor."""
     matches: list[MatchResult] = field(default_factory=list)
     queries_count: int = 0
     urls_fetched: int = 0
     matches_found: int = 0
+    # Страницы с совпадениями — processor пишет в Postgres + кэш шинглов
+    corpus_pages: list[WebPageHit] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -293,14 +303,16 @@ def _dedup_matches(matches: list[MatchResult]) -> list[MatchResult]:
 # Auto-add found pages to corpus (OpenSearch only — no embedding for speed)
 # ---------------------------------------------------------------------------
 
-def _auto_add_to_corpus(url: str, title: str, text: str, language: str) -> None:
-    """
-    Index a web-found page into OpenSearch corpus so future checks benefit.
-    Silently skips on any error or if corpus service unavailable.
-    """
+def _remember_page(
+    result: WebSearchResult,
+    url: str,
+    title: str,
+    text: str,
+    language: str,
+) -> None:
+    """Кэш шинглов сразу + очередь на persist в Postgres (processor)."""
     try:
         from app.services import corpus as corpus_service
-        # Use URL as a deterministic doc_id
         doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, url))
         corpus_service.index_document(
             doc_id, title or url, text,
@@ -308,6 +320,9 @@ def _auto_add_to_corpus(url: str, title: str, text: str, language: str) -> None:
         )
     except Exception:
         pass
+    result.corpus_pages.append(
+        WebPageHit(url=url, title=title or url, text=text, language=language or "unknown")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -393,8 +408,7 @@ def run_web_search(
                 if page_matches:
                     result.matches.extend(page_matches)
                     result.matches_found += len(page_matches)
-                    # Auto-add to corpus for future checks
-                    _auto_add_to_corpus(url, hit["title"], page_text, language)
+                    _remember_page(result, url, hit["title"], page_text, language)
 
     except Exception:
         pass  # Graceful degradation

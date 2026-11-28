@@ -14,12 +14,13 @@ from hashlib import sha256
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import school_admin_only, any_authenticated
 from app.config import settings
+from app.core.security import hash_password
 from app.database import get_db
 from app.services.email import send_invitation_email
 from app.models.api_key import ApiKey
@@ -215,15 +216,93 @@ async def list_teachers(
     return result.scalars().all()
 
 
+def _gen_password() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(12))
+
+
+class CreateTeacherIn(BaseModel):
+    email: EmailStr
+    full_name: Optional[str] = None
+
+
+class TeacherCredentialsOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    role: str = "teacher"
+    password: str
+
+
+@router.post("/teachers", response_model=TeacherCredentialsOut, status_code=201)
+async def create_teacher(
+    data: CreateTeacherIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    """Создать учителя сразу с паролем. Логин = email, пароль показывается один раз."""
+    active, pending, seats_limit = await _get_seat_counts(db, current_user.org_id)
+    if active + pending >= seats_limit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Лимит мест ({seats_limit}). Отключите учителя, чтобы освободить место.",
+        )
+
+    email = data.email.lower().strip()
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Пользователь с этим email уже есть")
+
+    raw = _gen_password()
+    name = (data.full_name or "").strip() or email.split("@")[0]
+    user = User(
+        email=email,
+        hashed_password=hash_password(raw),
+        full_name=name,
+        role="teacher",
+        org_id=current_user.org_id,
+        status="active",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return TeacherCredentialsOut(
+        id=user.id, email=user.email, full_name=user.full_name, password=raw
+    )
+
+
+@router.post("/teachers/{user_id}/reset-password", response_model=TeacherCredentialsOut)
+async def reset_teacher_password(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(school_admin_only),
+):
+    """Перевыпустить пароль учителя (показывается один раз)."""
+    result = await db.execute(
+        select(User).where(
+            User.id == user_id,
+            User.org_id == current_user.org_id,
+            User.role == "teacher",
+        )
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    raw = _gen_password()
+    user.hashed_password = hash_password(raw)
+    await db.commit()
+    return TeacherCredentialsOut(
+        id=user.id, email=user.email, full_name=user.full_name, password=raw
+    )
+
+
 @router.post("/invitations", response_model=InvitationOut, status_code=201)
 async def invite_teacher(
     data: InvitationCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(school_admin_only),
 ):
-    """Пригласить учителя. Лимит: seats_limit на организацию (по умолчанию 10).
-    Отключённые учителя (inactive) место не занимают. Приглашённые — занимают.
-    """
+    """Старый путь: приглашение по ссылке (учитель сам задаёт пароль)."""
     if data.role != "teacher":
         raise HTTPException(status_code=400, detail="school_admin can only invite teachers")
 
@@ -234,7 +313,10 @@ async def invite_teacher(
             detail=f"Seats limit reached ({seats_limit}). Deactivate a teacher to free a seat.",
         )
 
-    # Проверяем дубликат приглашения
+    existing = await db.execute(select(User).where(User.email == data.email.lower().strip()))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Пользователь с этим email уже есть")
+
     dup = await db.execute(
         select(Invitation).where(
             Invitation.email == data.email,

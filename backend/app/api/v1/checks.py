@@ -62,10 +62,14 @@ async def create_check(
     exclude_quotes: bool = Form(False),
     exclude_bibliography: bool = Form(True),
     min_match_words: int = Form(8),
+    language: Optional[str] = Form("auto"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(any_authenticated),
 ):
-    """Загрузить файл (.docx или .pdf) ИЛИ вставить текст и запустить обработку в фоне."""
+    """Загрузить файл (.docx или .pdf) ИЛИ вставить текст и запустить обработку в фоне.
+
+    language: auto | ru | uz | en — подсказка для детектора (по умолчанию авто).
+    """
     # Если у пользователя нет организации (например, дефолтный суперадмин),
     # привязываем его к демо-школе, чтобы проверка работала в демо-режиме.
     if not current_user.org_id:
@@ -150,6 +154,10 @@ async def create_check(
     file_path = upload_dir / filename
     file_path.write_bytes(content)
 
+    lang_hint = (language or "auto").strip().lower()
+    if lang_hint not in {"auto", "ru", "uz", "en"}:
+        lang_hint = "auto"
+
     check = Check(
         id=check_id,
         org_id=current_user.org_id,
@@ -158,6 +166,8 @@ async def create_check(
         file_size=len(content),
         file_path=str(file_path),
         status="processing",
+        # До обработки хранит hint (auto→None); processor пишет итоговый код языка
+        language=None if lang_hint == "auto" else lang_hint,
         work_title=work_title,
         student_name=student_name,
         student_id=student_id,
@@ -404,7 +414,9 @@ LANG_LABELS = {
     "uz-Latn": "узбекский (латиница)",
     "uz-Cyrl": "узбекский (кириллица)",
     "ru": "русский",
+    "en": "английский",
     "mixed": "смешанный",
+    "other": "другой",
 }
 
 

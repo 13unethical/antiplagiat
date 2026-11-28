@@ -28,13 +28,13 @@ from pathlib import Path
 
 random.seed(42)
 
-WINDOW_WORDS = 120
-MIN_WINDOW = 40
-LANGS = ("ru", "uz-Latn", "uz-Cyrl")
+WINDOW_WORDS = 200
+MIN_WINDOW = 60
+# Кириллица отключена по решению продукта — только ru + uz-Latn
+LANGS = ("ru", "uz-Latn")
 BUCKET = {
     "ru": "ru",
     "uz-Latn": "uz_latin",
-    "uz-Cyrl": "uz_cyrillic",
 }
 
 
@@ -180,6 +180,8 @@ def _read_ai(ai_dir: Path, per_lang: int) -> list[dict]:
             if key not in folder_lang:
                 continue
             lang = folder_lang[key]
+            if lang not in by_lang:
+                continue  # uz-Cyrl и прочее вне LANGS — пропускаем
             for path in sorted(lang_dir.glob("*.txt")):
                 try:
                     text = path.read_text(encoding="utf-8").strip()

@@ -54,7 +54,8 @@ LANG_FOLDER = {"ru": "ru", "uz-Latn": "uz_latin", "uz-Cyrl": "uz_cyrillic"}
 BUCKET = {"ru": "ru", "uz-Latn": "uz_latin", "uz-Cyrl": "uz_cyrillic"}
 
 
-def _windows(text: str, size: int = 120, min_w: int = 50) -> list[str]:
+def _windows(text: str, size: int = 280, min_w: int = 80) -> list[str]:
+    """Более длинные куски (~страница абзацев) — лучше для детектора на реальных работах."""
     words = text.split()
     if len(words) < min_w:
         return []
@@ -115,7 +116,7 @@ def _call(client, model: dict, prompt: str) -> str | None:
                     json={
                         "model": model["slug"],
                         "temperature": 0.85,
-                        "max_tokens": 900,
+                        "max_tokens": 1600,
                         "messages": [{"role": "user", "content": prompt}],
                     },
                 )
@@ -130,7 +131,7 @@ def _call(client, model: dict, prompt: str) -> str | None:
                     },
                     json={
                         "model": model["slug"],
-                        "max_tokens": 900,
+                        "max_tokens": 1600,
                         "thinking": {"type": "disabled"},
                         "messages": [{"role": "user", "content": prompt}],
                     },
@@ -256,12 +257,19 @@ def main() -> None:
             folder.mkdir(parents=True, exist_ok=True)
             fp = folder / f"{i:04d}.txt"
             meta_fp = folder / f"{i:04d}.meta.json"
-            if fp.exists() and fp.stat().st_size > 150:
+            # короткие старые куски (<120 слов) перегенерируем под длинные окна
+            existing = fp.read_text(encoding="utf-8") if fp.exists() else ""
+            if existing and len(existing.split()) >= 120 and fp.stat().st_size > 150:
                 skipped += 1
-                text = fp.read_text(encoding="utf-8")
+                text = existing
             else:
-                text = _call(client, model, _prompt(chunk, lang, mode))
-                if not text or len(text.split()) < 40:
+                text = None
+                for _try in range(2):
+                    text = _call(client, model, _prompt(chunk, lang, mode))
+                    if text and len(text.split()) >= 100:
+                        break
+                    text = None
+                if not text:
                     failed += 1
                     continue
                 fp.write_text(text, encoding="utf-8")
@@ -281,9 +289,9 @@ def main() -> None:
                     encoding="utf-8",
                 )
                 made += 1
-                if made % 20 == 0:
-                    print(f"    ...{made} готово")
-                time.sleep(0.25)
+                if made % 10 == 0:
+                    print(f"    [{model['name']}/{lang}] ...{made} готово", flush=True)
+                time.sleep(0.05)  # максимальный темп; 429 → ретраи в _call
 
             if lang == "uz-Latn" and not args.no_cyrl_from_latn:
                 from gen_ai import translit_uz

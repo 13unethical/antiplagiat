@@ -7,6 +7,7 @@
 """
 import hashlib
 import os
+import secrets
 import shutil
 import time
 import uuid
@@ -16,7 +17,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +26,7 @@ from app.config import settings
 from app.database import get_db
 from app.services.email import send_invitation_email
 
-from app.core.security import create_access_token
+from app.core.security import create_access_token, hash_password
 from app.models.api_key import ApiKey
 from app.models.api_request_log import ApiRequestLog
 from app.models.audit_log import AuditLog
@@ -161,7 +162,88 @@ async def update_organization(
 
 
 # ---------------------------------------------------------------------------
-# Приглашения (superadmin приглашает school_admin)
+# Создание school_admin сразу с паролем (логин = email)
+# ---------------------------------------------------------------------------
+
+
+def _gen_password() -> str:
+    # Читаемый пароль: 12 символов без неоднозначных
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(12))
+
+
+class CreateAdminIn(BaseModel):
+    email: EmailStr
+    full_name: Optional[str] = None
+
+
+class CredentialsOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    role: str
+    password: str  # показывается один раз
+
+
+@router.post("/organizations/{org_id}/admins", response_model=CredentialsOut, status_code=201)
+async def create_school_admin(
+    org_id: uuid.UUID,
+    data: CreateAdminIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(superadmin_only),
+):
+    """Создать админа школы сразу: вернуть email + пароль (показать один раз)."""
+    org_result = await db.execute(select(Organization).where(Organization.id == org_id))
+    if not org_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    email = data.email.lower().strip()
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Пользователь с этим email уже есть")
+
+    # Один активный school_admin на школу — если уже есть, не блокируем, но предупреждаем в UI
+    raw = _gen_password()
+    name = (data.full_name or "").strip() or email.split("@")[0]
+    user = User(
+        email=email,
+        hashed_password=hash_password(raw),
+        full_name=name,
+        role="school_admin",
+        org_id=org_id,
+        status="active",
+    )
+    db.add(user)
+    await db.flush()
+    await _log(db, current_user, "create_school_admin", "user", user.id, {"email": email, "org_id": str(org_id)})
+    await db.commit()
+    await db.refresh(user)
+    return CredentialsOut(
+        id=user.id, email=user.email, full_name=user.full_name, role=user.role, password=raw
+    )
+
+
+@router.post("/users/{user_id}/reset-password", response_model=CredentialsOut)
+async def reset_user_password(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(superadmin_only),
+):
+    """Перевыпустить пароль school_admin / teacher (показывается один раз)."""
+    user = await db.get(User, user_id)
+    if not user or user.role not in ("school_admin", "teacher"):
+        raise HTTPException(status_code=404, detail="User not found")
+    raw = _gen_password()
+    user.hashed_password = hash_password(raw)
+    await _log(db, current_user, "reset_password", "user", user.id, {"email": user.email})
+    await db.commit()
+    return CredentialsOut(
+        id=user.id, email=user.email, full_name=user.full_name, role=user.role, password=raw
+    )
+
+
+# ---------------------------------------------------------------------------
+# Приглашения (ссылка — опциональный старый путь)
 # ---------------------------------------------------------------------------
 
 
@@ -176,7 +258,6 @@ async def invite_school_admin(
     if not data.org_id:
         raise HTTPException(status_code=422, detail="org_id is required")
 
-    # Проверяем, что организация существует
     org_result = await db.execute(select(Organization).where(Organization.id == data.org_id))
     if not org_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -185,10 +266,9 @@ async def invite_school_admin(
     if existing_user.scalar_one_or_none():
         raise HTTPException(
             status_code=409,
-            detail="Пользователь с этим email уже зарегистрирован — войдите под ним или используйте «Войти как»",
+            detail="Пользователь с этим email уже зарегистрирован — используйте «Создать админа» / «Войти как»",
         )
 
-    # Нет активного приглашения для этого email в этой организации
     dup = await db.execute(
         select(Invitation).where(
             Invitation.email == data.email,
@@ -790,6 +870,70 @@ async def system_status(
             "status": "warn",
             "detail": "Нет данных",
         })
+
+    # 7. Brave Search (без live-запроса — status поллится каждые 30с)
+    if not settings.WEB_SEARCH_ENABLED:
+        services.append({
+            "name": "Brave Search",
+            "status": "warn",
+            "detail": "Выключен (WEB_SEARCH_ENABLED=false)",
+        })
+    elif not settings.BRAVE_API_KEY.strip():
+        services.append({
+            "name": "Brave Search",
+            "status": "warn",
+            "detail": "Не настроен · нужен BRAVE_API_KEY · smoke: python scripts/smoke_brave.py",
+        })
+    else:
+        services.append({
+            "name": "Brave Search",
+            "status": "ok",
+            "detail": "Ключ задан · smoke: python scripts/smoke_brave.py",
+        })
+
+    # 8. DocMaxxing EN AI (конфиг; live-probe не на каждый poll)
+    from app.services.en_ai_detector import is_configured
+    if not settings.DOCMAXXING_AI_ENABLED:
+        services.append({
+            "name": "DocMaxxing AI (EN)",
+            "status": "warn",
+            "detail": "Выключен (DOCMAXXING_AI_ENABLED=false)",
+        })
+    elif not is_configured():
+        services.append({
+            "name": "DocMaxxing AI (EN)",
+            "status": "warn",
+            "detail": "Не настроен · DOCMAXXING_AI_URL + DOCMAXXING_AI_KEY",
+        })
+    else:
+        services.append({
+            "name": "DocMaxxing AI (EN)",
+            "status": "ok",
+            "detail": settings.DOCMAXXING_AI_URL.strip().rstrip("/"),
+        })
+
+    # 9. Local AI ONNX (RU/UZ)
+    model_dir = (settings.AI_MODEL_DIR or "").strip()
+    if not model_dir:
+        services.append({
+            "name": "AI ONNX (RU/UZ)",
+            "status": "warn",
+            "detail": "AI_MODEL_DIR пуст · heuristic fallback",
+        })
+    else:
+        onnx_path = Path(model_dir) / "model.onnx"
+        if onnx_path.is_file():
+            services.append({
+                "name": "AI ONNX (RU/UZ)",
+                "status": "ok",
+                "detail": str(onnx_path),
+            })
+        else:
+            services.append({
+                "name": "AI ONNX (RU/UZ)",
+                "status": "warn",
+                "detail": f"Нет model.onnx в {model_dir}",
+            })
 
     return {
         "services": services,

@@ -74,6 +74,16 @@ docker compose --profile prod up --build -d
 
 ---
 
+## Brave + ИИ-детектор (ops)
+
+Полный цикл: [`OPS_AI_DETECTOR.md`](OPS_AI_DETECTOR.md).
+
+Кратко:
+- `BRAVE_API_KEY` — живой веб-поиск в проверках;
+- `DOCMAXXING_AI_URL` + `DOCMAXXING_AI_KEY` — EN-детектор DocMaxxing;
+- `AI_MODEL_DIR` — локальный ONNX для RU/UZ;
+- датасет: `cd backend/ml && python ingest_human_corpus.py && python make_dataset_v3.py`.
+
 ## Переменные окружения
 
 Все переменные описаны в `backend/.env.example`.

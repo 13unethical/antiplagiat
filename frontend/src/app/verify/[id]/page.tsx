@@ -20,7 +20,9 @@ const LANG_LABELS: Record<string, string> = {
   "uz-Latn": "узбекский (латиница)",
   "uz-Cyrl": "узбекский (кириллица)",
   ru: "русский",
+  en: "английский",
   mixed: "смешанный",
+  other: "другой",
 };
 
 export default function VerifyPage() {

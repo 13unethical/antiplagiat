@@ -4,46 +4,49 @@
 Обучение запускается на **GPU** (Google Colab / Kaggle / арендованный сервер),
 инференс в бэкенде идёт через **ONNX Runtime** без PyTorch.
 
+Операционный чеклист (Brave + EN DocMaxxing + цикл RU/UZ): см. корневой
+[`OPS_AI_DETECTOR.md`](../../OPS_AI_DETECTOR.md).
+
 ## Пайплайн
 
 ```
-данные (data/human, data/ai)  ->  make_dataset.py  ->  train.py  ->  eval.py  ->  export_onnx.py  ->  backend
+human_corpus -> ingest_human_corpus.py -> data/human
+data/ai_v2   + data/human -> make_dataset_v3.py -> data/v3
+data/v3 -> train.py (xlm-roberta-base) -> eval.py -> export_onnx.py -> AI_MODEL_DIR
 ```
+
+EN в проде идёт через DocMaxxing (`DOCMAXXING_AI_*`), не через этот ONNX.
 
 ## 1. Данные
 
-Это главный и самый трудоёмкий шаг. Нужны две группы текстов на uz/ru:
+```bash
+# Симлинки на Desktop/human_corpus
+python ingest_human_corpus.py --src ~/Desktop/human_corpus --out data/human
 
-- `data/human/**/*.txt` — **человеческие** тексты. Лучше всего студенческие
-  работы **до 2022 года** (до массового ChatGPT). Один файл — один текст.
-- `data/ai/<generator>/**/*.txt` — **ИИ-тексты**, разложенные по папкам-генераторам
-  (`data/ai/gpt-4o/…`, `data/ai/claude/…`, `data/ai/gemini/…`). Разнообразие
-  генераторов критично для обобщения.
+# JSONL v3 под XLM-R
+python make_dataset_v3.py --human data/human --ai data/ai_v2 --out data/v3 --per-lang 2500
 
-Быстрый старт без реальных данных (бутстрап):
+# Leave-one-model-out
+python make_dataset_v3.py --human data/human --ai data/ai_v2 --out data/v3-lomo \
+  --exclude-generator gpt-4o-mini
+```
+
+Быстрый бутстрап без корпуса:
 
 ```bash
 python make_dataset.py --out data --synth 400
 ```
 
-Автогенерация ИИ-текстов по темам (нужен ключ в окружении):
-
-```bash
-ANTHROPIC_API_KEY=... python make_dataset.py --out data --gen-llm data/topics.txt
-# или OPENAI_API_KEY=...
-```
-
-`make_dataset.py` режет длинные тексты на окна ~120 слов и делает
-стратифицированный train/val. Результат: `data/train.jsonl`, `data/val.jsonl`.
+Автогенерация ИИ-текстов: `gen_ai_v2.py` / `make_dataset.py --gen-llm` (нужен API-ключ).
 
 ## 2. Обучение (GPU)
 
 ```bash
 pip install -r requirements.txt
-python train.py --data data --model xlm-roberta-base --epochs 3 --out runs/ai-v1
+python train.py --data data/v3 --model xlm-roberta-base --epochs 3 --out runs/ai-v3
 ```
 
-Модель сохраняется в `runs/ai-v1`.
+Модель сохраняется в `runs/ai-v3`.
 
 ## 3. Честная оценка (leave-one-model-out)
 

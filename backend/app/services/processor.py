@@ -31,7 +31,7 @@ from app.models.repository_document import RepositoryDocument
 from app.models.web_search_log import WebSearchLog
 from app.services.ai_detector import detect_ai
 from app.services.flagged import run_flagged_checks
-from app.services.language import detect_language
+from app.services.language import resolve_language
 from app.services.mt_detector import detect_mt
 from app.services.normalizer import normalize_text
 from app.services.parser import parse_file
@@ -62,8 +62,10 @@ async def process_check(check_id: uuid.UUID) -> None:
             # 3. Нормализация
             normalized = await asyncio.to_thread(normalize_text, parse_result.raw_text)
 
-            # 4. Язык
-            language = await asyncio.to_thread(detect_language, normalized)
+            # 4. Язык (авто или ручная подсказка ru/uz/en с формы)
+            language = await asyncio.to_thread(
+                resolve_language, normalized, check.language
+            )
 
             # 5. Слова (простой подсчёт)
             word_count = len(normalized.split())
@@ -97,6 +99,36 @@ async def process_check(check_id: uuid.UUID) -> None:
             )
             if web_result.matches:
                 all_matches = all_matches + web_result.matches
+
+            # 8b. Brave-находки → Postgres корпус (дедуп по content_hash)
+            if web_result.corpus_pages:
+                import hashlib
+                from app.models.corpus import CorpusDocument
+
+                existing_hashes = set(
+                    (
+                        await db.execute(select(CorpusDocument.content_hash))
+                    ).scalars().all()
+                )
+                for page in web_result.corpus_pages:
+                    h = hashlib.sha256(page.text.encode("utf-8")).hexdigest()
+                    if h in existing_hashes:
+                        continue
+                    existing_hashes.add(h)
+                    doc_id = uuid.uuid5(uuid.NAMESPACE_URL, page.url)
+                    db.add(
+                        CorpusDocument(
+                            id=doc_id,
+                            title=(page.title or page.url)[:500],
+                            url=page.url[:1000],
+                            language=page.language or language or "other",
+                            source_type="web",
+                            content_hash=h,
+                            content=page.text,
+                            word_count=len(page.text.split()),
+                            opensearch_id=str(doc_id),
+                        )
+                    )
 
             # Финальный пересчёт покрытия
             if all_matches:

@@ -157,12 +157,23 @@ def _score_from_features(f: dict[str, float]) -> float:
 def detect_ai(text: str, language: str = "unknown") -> AiDetectorResult:
     if not text or len(text.strip()) < 100:
         return AiDetectorResult(ai_percent=0.0, model_version=_MODEL_VERSION)
+
+    # 0. English → DocMaxxing DeBERTa (windowed /score).
+    if language == "en":
+        try:
+            from app.services.en_ai_detector import detect_en
+            en = detect_en(text)
+            if en is not None:
+                return AiDetectorResult(ai_percent=en.ai_percent, model_version=en.model_version)
+        except Exception:  # noqa: BLE001
+            pass
+
     # 1. Обученная ONNX-модель, если настроена (AI_MODEL_DIR).
     try:
         from app.services.ai_model import predict_ai_percent
         ml = predict_ai_percent(text)
         if ml is not None:
-            return AiDetectorResult(ai_percent=ml, model_version="distilbert-ml-onnx-v2")
+            return AiDetectorResult(ai_percent=ml, model_version="distilbert-ml-onnx-v3")
     except Exception:  # noqa: BLE001
         pass
     # 2. Эвристика heuristic-v1 (fallback).
@@ -193,6 +204,14 @@ def ai_spans(text: str, language: str = "unknown") -> list[tuple[int, int]]:
     """Char-спаны предложений, похожих на ИИ-текст — для подсветки в отчёте."""
     if not text or len(text.strip()) < 100:
         return []
+    if language == "en":
+        try:
+            from app.services.en_ai_detector import detect_en
+            en = detect_en(text)
+            if en is not None:
+                return en.spans
+        except Exception:  # noqa: BLE001
+            pass
     sents = _sentences(text)
     if len(sents) < 2:
         return []
